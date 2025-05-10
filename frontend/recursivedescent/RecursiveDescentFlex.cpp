@@ -90,20 +90,140 @@ int rd_flex()
         return RDTokenType::T_EOF;
     }
 
-    // TODO 请自行实现删除源文件中的注释，含单行注释和多行注释等
+    // 处理注释，包括单行注释和多行注释
+    if (c == '/') {
+        // 获取下一个字符
+        int next_c = fgetc(rd_filein);
+        
+        // 处理单行注释 //
+        if (next_c == '/') {
+            // 读取直到行尾或文件结束
+            while ((c = fgetc(rd_filein)) != EOF && c != '\n' && c != '\r') {
+                // 继续读取，直到行尾
+            }
+            
+            // 如果遇到了换行符，增加行号
+            if (c == '\r') {
+                c = fgetc(rd_filein);
+                rd_line_no++;
+                if (c != '\n') {
+                    // 不是\n，则回退
+                    ungetc(c, rd_filein);
+                }
+            } else if (c == '\n') {
+                rd_line_no++;
+            } else if (c == EOF) {
+                // 文件结束
+                return RDTokenType::T_EOF;
+            }
+            
+            // 递归调用以获取下一个有效的token
+            return rd_flex();
+        }
+        // 处理多行注释 /* */
+        else if (next_c == '*') {
+            bool comment_ended = false;
+            
+            // 读取直到遇到 */
+            while (!comment_ended && (c = fgetc(rd_filein)) != EOF) {
+                if (c == '*') {
+                    c = fgetc(rd_filein);
+                    if (c == '/') {
+                        comment_ended = true;
+                    } else if (c != EOF) {
+                        // 如果不是'/'，回退以便继续检查
+                        ungetc(c, rd_filein);
+                    }
+                }
+                // 处理注释中的换行
+                else if (c == '\r') {
+                    c = fgetc(rd_filein);
+                    rd_line_no++;
+                    if (c != '\n') {
+                        // 不是\n，则回退
+                        ungetc(c, rd_filein);
+                    }
+                } else if (c == '\n') {
+                    rd_line_no++;
+                }
+            }
+            
+            if (!comment_ended && c == EOF) {
+                // 如果文件结束但注释没有结束，报错
+                printf("Line(%lld): Unterminated comment\n", (long long) rd_line_no);
+                return RDTokenType::T_ERR;
+            }
+            
+            // 递归调用以获取下一个有效的token
+            return rd_flex();
+        }
+        // 如果不是注释，而是除法运算符
+        else {
+            // 回退下一个字符，因为它不是注释的一部分
+            ungetc(next_c, rd_filein);
+            
+            // 识别字符/
+            tokenKind = RDTokenType::T_DIV;
+            // 存储字符/
+            tokenValue = "/";
+            return tokenKind;
+        }
+    }
 
     // 处理数字
     if (isdigit(c)) {
 
-        // 识别无符号数，这里只处理正整数或者0
-        // FIXME 0开头的整数这里也识别成了10进制整数，在C语言中0开头的数字串是8进制数字
-
+        // 识别无符号数
         rd_lval.integer_num.lineno = rd_line_no;
-        rd_lval.integer_num.val = c - '0';
-
-        // 最长匹配，直到非数字结束
-        while (isdigit(c = fgetc(rd_filein))) {
-            rd_lval.integer_num.val = rd_lval.integer_num.val * 10 + c - '0';
+        
+        // 处理八进制和十六进制数字
+        if (c == '0') {
+            rd_lval.integer_num.val = 0;
+            c = fgetc(rd_filein);
+            
+            // 处理十六进制数字 (0x 或 0X)
+            if (c == 'x' || c == 'X') {
+                c = fgetc(rd_filein);
+                if (isxdigit(c)) {
+                    // 解析十六进制数字
+                    do {
+                        if (isdigit(c)) {
+                            rd_lval.integer_num.val = rd_lval.integer_num.val * 16 + (c - '0');
+                        } else if (c >= 'a' && c <= 'f') {
+                            rd_lval.integer_num.val = rd_lval.integer_num.val * 16 + (c - 'a' + 10);
+                        } else if (c >= 'A' && c <= 'F') {
+                            rd_lval.integer_num.val = rd_lval.integer_num.val * 16 + (c - 'A' + 10);
+                        }
+                        c = fgetc(rd_filein);
+                    } while (isxdigit(c));
+                } else {
+                    // 错误：0x 后面没有有效的十六进制数字
+                    printf("Line(%lld): Invalid hexadecimal digit\n", (long long) rd_line_no);
+                    tokenKind = RDTokenType::T_ERR;
+                    ungetc(c, rd_filein);
+                    return tokenKind;
+                }
+            } 
+            // 处理八进制数字 (0开头)
+            else if (c >= '0' && c <= '7') {
+                do {
+                    rd_lval.integer_num.val = rd_lval.integer_num.val * 8 + (c - '0');
+                    c = fgetc(rd_filein);
+                } while (c >= '0' && c <= '7');
+            }
+            // 单个0
+            else {
+                // 已经读取了一个0，不需要做其他处理
+            }
+        } 
+        // 处理十进制数字 (1-9开头)
+        else {
+            rd_lval.integer_num.val = c - '0';
+            
+            // 最长匹配，直到非数字结束
+            while (isdigit(c = fgetc(rd_filein))) {
+                rd_lval.integer_num.val = rd_lval.integer_num.val * 10 + c - '0';
+            }
         }
 
         // 存储数字的token值
@@ -148,6 +268,16 @@ int rd_flex()
         tokenKind = RDTokenType::T_SUB;
 		// 存储字符-
         tokenValue = "-";
+    } else if (c == '*') {
+        // 识别字符*
+        tokenKind = RDTokenType::T_MUL;
+		// 存储字符*
+        tokenValue = "*";
+    } else if (c == '%') {
+        // 识别字符%
+        tokenKind = RDTokenType::T_MOD;
+		// 存储字符%
+        tokenValue = "%";
     } else if (c == '=') {
         // 识别字符=
         tokenKind = RDTokenType::T_ASSIGN;

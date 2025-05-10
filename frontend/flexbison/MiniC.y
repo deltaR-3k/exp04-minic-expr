@@ -49,7 +49,12 @@ void yyerror(char * msg);
 %token T_COMMA
 
 // 运算符
-%token T_ASSIGN T_SUB T_ADD
+%token T_ASSIGN T_SUB T_ADD T_MUL T_DIV T_MOD
+
+// 定义运算符优先级和结合性
+%left T_ADD T_SUB
+%left T_MUL T_DIV T_MOD
+%right UMINUS  // 单目求负运算符的优先级
 
 // 非终结符
 // %type指定文法的非终结符号，<>可指定文法属性
@@ -62,10 +67,10 @@ void yyerror(char * msg);
 %type <node> Expr
 %type <node> LVal
 %type <node> VarDecl VarDeclExpr VarDef
-%type <node> AddExp UnaryExp PrimaryExp
+%type <node> AddExp MulExp UnaryExp PrimaryExp
 %type <node> RealParamList
 %type <type> BasicType
-%type <op_class> AddOp
+%type <op_class> AddOp MulOp
 %%
 
 // 编译单元可包含若干个函数与全局变量定义。要在语义分析时检查main函数存在
@@ -252,33 +257,39 @@ Statement : T_RETURN Expr T_SEMICOLON {
 	;
 
 // 表达式文法 expr : AddExp
-// 表达式目前只支持加法与减法运算
+// 表达式目前支持加减乘除求余运算
 Expr : AddExp {
 		// 直接传递给归约后的节点
 		$$ = $1;
 	}
 	;
 
-// 加减表达式文法：addExp: unaryExp (addOp unaryExp)*
-// 由于bison不支持用闭包表达，因此需要拆分成左递归的形式
-// 改造后的左递归文法：
-// addExp : unaryExp | unaryExp addOp unaryExp | addExp addOp unaryExp
-AddExp : UnaryExp {
+// 加减表达式文法
+AddExp : MulExp {
+		// 乘除表达式
+
+		// 直接传递到归约后的节点
+		$$ = $1;
+	}
+	| AddExp AddOp MulExp {
+		// 加减运算
+
+		// 创建加减运算节点，孩子为AddExp($1)和MulExp($3)
+		$$ = create_contain_node(ast_operator_type($2), $1, $3);
+	}
+	;
+
+// 乘除表达式文法
+MulExp : UnaryExp {
 		// 一目表达式
 
 		// 直接传递到归约后的节点
 		$$ = $1;
 	}
-	| UnaryExp AddOp UnaryExp {
-		// 两个一目表达式的加减运算
+	| MulExp MulOp UnaryExp {
+		// 乘除求余运算
 
-		// 创建加减运算节点，其孩子为两个一目表达式节点
-		$$ = create_contain_node(ast_operator_type($2), $1, $3);
-	}
-	| AddExp AddOp UnaryExp {
-		// 左递归形式可通过加减连接多个一元表达式
-
-		// 创建加减运算节点，孩子为AddExp($1)和UnaryExp($3)
+		// 创建乘除求余运算节点，孩子为MulExp($1)和UnaryExp($3)
 		$$ = create_contain_node(ast_operator_type($2), $1, $3);
 	}
 	;
@@ -292,15 +303,30 @@ AddOp: T_ADD {
 	}
 	;
 
-// 目前一元表达式可以为基本表达式、函数调用，其中函数调用的实参可有可无
-// 其文法为：unaryExp: primaryExp | T_ID T_L_PAREN realParamList? T_R_PAREN
-// 由于bison不支持？表达，因此变更后的文法为：
-// unaryExp: primaryExp | T_ID T_L_PAREN T_R_PAREN | T_ID T_L_PAREN realParamList T_R_PAREN
+// 乘除求余运算符
+MulOp: T_MUL {
+		$$ = (int)ast_operator_type::AST_OP_MUL;
+	}
+	| T_DIV {
+		$$ = (int)ast_operator_type::AST_OP_DIV;
+	}
+	| T_MOD {
+		$$ = (int)ast_operator_type::AST_OP_MOD;
+	}
+	;
+
+// 一元表达式
 UnaryExp : PrimaryExp {
 		// 基本表达式
 
 		// 传递到归约后的UnaryExp上
 		$$ = $1;
+	}
+	| T_SUB UnaryExp %prec UMINUS {
+		// 单目求负运算
+
+		// 创建单目求负运算节点，其孩子为UnaryExp($2)
+		$$ = create_contain_node(ast_operator_type::AST_OP_NEG, $2);
 	}
 	| T_ID T_L_PAREN T_R_PAREN {
 		// 没有实参的函数调用

@@ -40,6 +40,9 @@ enum RDTokenType {
 	T_ASSIGN,
 	T_ADD,
     T_SUB,
+    T_MUL,
+    T_DIV,
+    T_MOD,
 };
 
 /// @brief 词法与语法分析数据交互的Token的值类型

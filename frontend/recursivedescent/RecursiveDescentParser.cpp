@@ -35,6 +35,7 @@ static RDTokenType lookaheadTag = RDTokenType::T_EMPTY;
 
 static ast_node * Block();
 static ast_node * expr();
+static ast_node * unaryExp();
 
 ///
 /// @brief 继续检查LookAhead指向的记号是否是T，用于符号的FIRST集合或Follow集合判断
@@ -177,13 +178,77 @@ static ast_node * idTail(var_id_attr & id)
 }
 
 ///
+/// @brief 乘除模运算符, 其文法为mulOp : T_MUL | T_DIV | T_MOD;
+/// @return ast_operator_type AST中节点的运算符
+///
+ast_operator_type mulOp()
+{
+    ast_operator_type type = ast_operator_type::AST_OP_MAX;
+
+    if (F(T_MUL)) {
+        type = ast_operator_type::AST_OP_MUL;
+        // 跳过当前的记号，指向下一个记号
+        advance();
+    } else if (F(T_DIV)) {
+        type = ast_operator_type::AST_OP_DIV;
+        // 跳过当前的记号，指向下一个记号
+        advance();
+    } else if (F(T_MOD)) {
+        type = ast_operator_type::AST_OP_MOD;
+        // 跳过当前的记号，指向下一个记号
+        advance();
+    }
+
+    return type;
+}
+
+///
+/// @brief 乘法表达式，文法 mulExp : unaryExp (mulOp unaryExp)*
+/// 其中的*表示闭包，闭包的就是循环
+///
+/// @return ast_node*
+///
+static ast_node * mulExp()
+{
+    // 识别第一个unaryExp
+    ast_node * left_node = unaryExp();
+    if (!left_node) {
+        // 非法的一元表达式
+        return nullptr;
+    }
+
+    // 识别闭包(mulOp unaryExp)*，循环
+    // 循环退出条件，1) 不是二元乘除模运算符， 2) 语法错误
+    for (;;) {
+        // 获取乘除模运算符
+        ast_operator_type op = mulOp();
+        if (ast_operator_type::AST_OP_MAX == op) {
+            // 不是乘除模运算符则正常结束
+            break;
+        }
+
+        // 获取右侧表达式
+        ast_node * right_node = unaryExp();
+        if (!right_node) {
+            // 二元乘除模运算没有合法的右侧表达式
+            break;
+        }
+
+        // 创建二元运算符节点
+        left_node = create_contain_node(op, left_node, right_node);
+    }
+
+    return left_node;
+}
+
+///
 /// @brief 一元表达式文法识别，其文法为
-/// unaryExp: primaryExp | T_ID T_L_PAREN realParamList? T_R_PAREN
+/// unaryExp: primaryExp | T_ID T_L_PAREN realParamList? T_R_PAREN | T_SUB unaryExp
 /// primaryExp: T_DIGIT | T_L_PAREN expr T_R_PAREN | lVal
 /// lVal: T_ID
 /// 因primaryExp的FIRST集合包含T_ID，因此该文法产生式不是LL(1)的，需要进行改造
 /// 改造后的文法为：
-/// unaryExp: T_DIGIT | T_L_PAREN expr T_R_PAREN | T_ID idTail
+/// unaryExp: T_SUB unaryExp | T_DIGIT | T_L_PAREN expr T_R_PAREN | T_ID idTail
 /// idTail: T_L_PAREN realParamList? T_R_PAREN | ε
 /// 其中idTail表示标识符ID后可以是括号，代表函数调用；
 /// 可以是中括号，代表数组（暂不支持）；
@@ -194,34 +259,35 @@ static ast_node * unaryExp()
 {
     ast_node * node = nullptr;
 
-    if (F(T_DIGIT)) {
-
+    if (match(T_SUB)) {
+        // 单目求负运算符，unaryExp: T_SUB unaryExp
+        
+        // 递归调用unaryExp处理操作数
+        ast_node * operand = unaryExp();
+        if (!operand) {
+            semerror("单目求负运算符后缺少表达式");
+            return nullptr;
+        }
+        
+        // 创建单目求负运算符节点
+        node = create_contain_node(ast_operator_type::AST_OP_NEG, operand);
+    } else if (F(T_DIGIT)) {
         // 无符号整数，primaryExp: T_DIGIT
-
         node = ast_node::New(rd_lval.integer_num);
-
         // 跳过当前记号，指向下一个记号
         advance();
-
     } else if (match(T_L_PAREN)) {
-
         // 括号表达式，primaryExp: T_L_PAREN expr T_R_PAREN
-
         // 括号内表达式识别
         node = expr();
-
         if (!match(T_R_PAREN)) {
             semerror("缺少右括号");
         }
     } else if (F(T_ID)) {
-
         // ID开头的表达式，可以是函数调用，也可以是数组(目前不支持)，或者简单变量，primaryExp: T_ID idTail
-
         var_id_attr & id = rd_lval.var_id;
-
         // 跳过当前记号，指向下一个记号
         advance();
-
         // 识别ID尾部符号
         node = idTail(id);
     }
@@ -238,15 +304,11 @@ ast_operator_type addOp()
     ast_operator_type type = ast_operator_type::AST_OP_MAX;
 
     if (F(T_ADD)) {
-
         type = ast_operator_type::AST_OP_ADD;
-
         // 跳过当前的记号，指向下一个记号
         advance();
     } else if (F(T_SUB)) {
-
         type = ast_operator_type::AST_OP_SUB;
-
         // 跳过当前的记号，指向下一个记号
         advance();
     }
@@ -255,36 +317,33 @@ ast_operator_type addOp()
 }
 
 ///
-/// @brief 加减表达式，文法 addExp : unaryExp (addOp unaryExp)*
+/// @brief 加减表达式，文法 addExp : mulExp (addOp mulExp)*
 /// 其中的*表示闭包，闭包的就是循环
 ///
 /// @return ast_node*
 ///
 static ast_node * addExp()
 {
-    // 识别第一个unaryExp
-    ast_node * left_node = unaryExp();
+    // 识别第一个mulExp
+    ast_node * left_node = mulExp();
     if (!left_node) {
-        // 非法的一元表达式
+        // 非法的乘法表达式
         return nullptr;
     }
 
-    // 识别闭包(addOp unaryExp)*，循环
+    // 识别闭包(addOp mulExp)*，循环
     // 循环退出条件，1) 不是二元加减运算符， 2) 语法错误
     for (;;) {
-
         // 获取加减运算符
         ast_operator_type op = addOp();
         if (ast_operator_type::AST_OP_MAX == op) {
-
             // 不是加减运算符则正常结束
             break;
         }
 
         // 获取右侧表达式
-        ast_node * right_node = unaryExp();
+        ast_node * right_node = mulExp();
         if (!right_node) {
-
             // 二元加减运算没有合法的右侧表达式
             break;
         }
@@ -296,7 +355,7 @@ static ast_node * addExp()
     return left_node;
 }
 
-/// @brief 表达式文法 expr : addExp, 表达式目前只支持加法与减法运算
+/// @brief 表达式文法 expr : addExp, 表达式支持加减乘除模运算和单目求负
 /// @return AST的节点
 static ast_node * expr()
 {

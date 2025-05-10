@@ -49,6 +49,10 @@ InstSelectorArm32::InstSelectorArm32(vector<Instruction *> & _irCode,
 
     translator_handlers[IRInstOperator::IRINST_OP_ADD_I] = &InstSelectorArm32::translate_add_int32;
     translator_handlers[IRInstOperator::IRINST_OP_SUB_I] = &InstSelectorArm32::translate_sub_int32;
+    translator_handlers[IRInstOperator::IRINST_OP_MUL_I] = &InstSelectorArm32::translate_mul_int32;
+    translator_handlers[IRInstOperator::IRINST_OP_DIV_I] = &InstSelectorArm32::translate_div_int32;
+    translator_handlers[IRInstOperator::IRINST_OP_MOD_I] = &InstSelectorArm32::translate_mod_int32;
+    translator_handlers[IRInstOperator::IRINST_OP_NEG_I] = &InstSelectorArm32::translate_neg_int32;
 
     translator_handlers[IRInstOperator::IRINST_OP_FUNC_CALL] = &InstSelectorArm32::translate_call;
     translator_handlers[IRInstOperator::IRINST_OP_ARG] = &InstSelectorArm32::translate_arg;
@@ -301,6 +305,143 @@ void InstSelectorArm32::translate_add_int32(Instruction * inst)
 void InstSelectorArm32::translate_sub_int32(Instruction * inst)
 {
     translate_two_operator(inst, "sub");
+}
+
+/// @brief 整数乘法指令翻译成ARM32汇编
+/// @param inst IR指令
+void InstSelectorArm32::translate_mul_int32(Instruction * inst)
+{
+    translate_two_operator(inst, "mul");
+}
+
+/// @brief 整数除法指令翻译成ARM32汇编
+/// @param inst IR指令
+void InstSelectorArm32::translate_div_int32(Instruction * inst)
+{
+    translate_two_operator(inst, "sdiv");
+}
+
+/// @brief 整数求余指令翻译成ARM32汇编
+/// @param inst IR指令
+void InstSelectorArm32::translate_mod_int32(Instruction * inst)
+{
+    Value * result = inst;
+    Value * arg1 = inst->getOperand(0);
+    Value * arg2 = inst->getOperand(1);
+
+    int32_t arg1_reg_no = arg1->getRegId();
+    int32_t arg2_reg_no = arg2->getRegId();
+    int32_t result_reg_no = inst->getRegId();
+    int32_t load_result_reg_no, load_arg1_reg_no, load_arg2_reg_no;
+    int32_t temp_reg_no;
+
+    // 看arg1是否是寄存器，若是则寄存器寻址，否则要load变量到寄存器中
+    if (arg1_reg_no == -1) {
+        // 分配一个寄存器r8
+        load_arg1_reg_no = simpleRegisterAllocator.Allocate(arg1);
+        // arg1 -> r8
+        iloc.load_var(load_arg1_reg_no, arg1);
+    } else {
+        load_arg1_reg_no = arg1_reg_no;
+    }
+
+    // 看arg2是否是寄存器，若是则寄存器寻址，否则要load变量到寄存器中
+    if (arg2_reg_no == -1) {
+        // 分配一个寄存器r9
+        load_arg2_reg_no = simpleRegisterAllocator.Allocate(arg2);
+        // arg2 -> r9
+        iloc.load_var(load_arg2_reg_no, arg2);
+    } else {
+        load_arg2_reg_no = arg2_reg_no;
+    }
+
+    // 看结果变量是否是寄存器，若不是则需要分配一个新的寄存器来保存运算的结果
+    if (result_reg_no == -1) {
+        // 分配一个寄存器r10，用于暂存结果
+        load_result_reg_no = simpleRegisterAllocator.Allocate(result);
+    } else {
+        load_result_reg_no = result_reg_no;
+    }
+    
+    // 分配一个临时寄存器用于存储除法结果
+    temp_reg_no = simpleRegisterAllocator.Allocate();
+    
+    // 先进行除法运算，结果存储在临时寄存器中
+    iloc.inst("sdiv", 
+              PlatformArm32::regName[temp_reg_no], 
+              PlatformArm32::regName[load_arg1_reg_no], 
+              PlatformArm32::regName[load_arg2_reg_no]);
+    
+    // 计算余数：余数 = 被除数 - (商 * 除数)
+    // 先计算商 * 除数
+    iloc.inst("mul", 
+              PlatformArm32::regName[temp_reg_no], 
+              PlatformArm32::regName[temp_reg_no], 
+              PlatformArm32::regName[load_arg2_reg_no]);
+    
+    // 然后用被除数减去(商 * 除数)得到余数
+    iloc.inst("sub", 
+              PlatformArm32::regName[load_result_reg_no], 
+              PlatformArm32::regName[load_arg1_reg_no], 
+              PlatformArm32::regName[temp_reg_no]);
+
+    // 结果不是寄存器，则需要把rs_reg_name保存到结果变量中
+    if (result_reg_no == -1) {
+        // r10 -> result
+        iloc.store_var(load_result_reg_no, result, ARM32_TMP_REG_NO);
+    }
+
+    // 释放寄存器
+    simpleRegisterAllocator.free(temp_reg_no);
+    simpleRegisterAllocator.free(arg1);
+    simpleRegisterAllocator.free(arg2);
+    simpleRegisterAllocator.free(result);
+}
+
+/// @brief 整数求负指令翻译成ARM32汇编
+/// @param inst IR指令
+void InstSelectorArm32::translate_neg_int32(Instruction * inst)
+{
+    Value * result = inst;
+    Value * arg = inst->getOperand(1);  // 操作数在第二个位置，第一个是常量0
+
+    int32_t arg_reg_no = arg->getRegId();
+    int32_t result_reg_no = inst->getRegId();
+    int32_t load_arg_reg_no, load_result_reg_no;
+
+    // 看arg是否是寄存器，若是则寄存器寻址，否则要load变量到寄存器中
+    if (arg_reg_no == -1) {
+        // 分配一个寄存器r8
+        load_arg_reg_no = simpleRegisterAllocator.Allocate(arg);
+        // arg -> r8
+        iloc.load_var(load_arg_reg_no, arg);
+    } else {
+        load_arg_reg_no = arg_reg_no;
+    }
+
+    // 看结果变量是否是寄存器，若不是则需要分配一个新的寄存器来保存运算的结果
+    if (result_reg_no == -1) {
+        // 分配一个寄存器r9，用于暂存结果
+        load_result_reg_no = simpleRegisterAllocator.Allocate(result);
+    } else {
+        load_result_reg_no = result_reg_no;
+    }
+
+    // 使用rsb指令实现求负：rsb rd, rn, #0 等价于 rd = 0 - rn
+    iloc.inst("rsb", 
+              PlatformArm32::regName[load_result_reg_no], 
+              PlatformArm32::regName[load_arg_reg_no], 
+              "#0");
+
+    // 结果不是寄存器，则需要把结果保存到结果变量中
+    if (result_reg_no == -1) {
+        // r9 -> result
+        iloc.store_var(load_result_reg_no, result, ARM32_TMP_REG_NO);
+    }
+
+    // 释放寄存器
+    simpleRegisterAllocator.free(arg);
+    simpleRegisterAllocator.free(result);
 }
 
 /// @brief 函数调用指令翻译成ARM32汇编
