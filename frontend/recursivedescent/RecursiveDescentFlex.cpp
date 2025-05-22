@@ -218,11 +218,11 @@ int rd_flex()
         } 
         // 处理十进制数字 (1-9开头)
         else {
-            rd_lval.integer_num.val = c - '0';
-            
-            // 最长匹配，直到非数字结束
-            while (isdigit(c = fgetc(rd_filein))) {
-                rd_lval.integer_num.val = rd_lval.integer_num.val * 10 + c - '0';
+        rd_lval.integer_num.val = c - '0';
+
+        // 最长匹配，直到非数字结束
+        while (isdigit(c = fgetc(rd_filein))) {
+            rd_lval.integer_num.val = rd_lval.integer_num.val * 10 + c - '0';
             }
         }
 
