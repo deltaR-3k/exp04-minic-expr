@@ -405,3 +405,21 @@ ast_node * add_var_decl_node(ast_node * stmt_node, var_id_attr & id)
 
     return stmt_node;
 }
+
+///
+/// @brief 创建形参节点
+/// @param line_no 行号
+/// @param param_name 参数名
+/// @return ast_node* 形参节点
+///
+ast_node * create_func_formal_param(uint32_t line_no, const char * param_name)
+{
+    // 创建形参节点
+    ast_node * param_node = new ast_node(ast_operator_type::AST_OP_FUNC_FORMAL_PARAM);
+    
+    // 设置参数名
+    param_node->name = param_name;
+    param_node->line_no = line_no;
+    
+    return param_node;
+}
