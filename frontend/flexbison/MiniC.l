@@ -53,6 +53,19 @@
 "/"         { return T_DIV; }
 "%"         { return T_MOD; }
 
+"=="        { return T_EQ; }
+"!="        { return T_NEQ; }
+"<"         { return T_LT; }
+"<="        { return T_LE; }
+">"         { return T_GT; }
+">="        { return T_GE; }
+
+"&&"        { return T_AND; }
+"||"        { return T_OR; }
+"!"         { return T_NOT; }
+
+"//"[^\n]*  { /* 单行注释，忽略 */ }
+"/*"([^*]|"*"[^/])*"*/" { /* 多行注释，忽略 */ }
 
 "0"[0-7]*   {
                 // 八进制数字，以0开头
@@ -86,6 +99,12 @@
                 // return关键字 关键字的识别要在标识符识别的前边，，这是因为关键字也是标识符，不过是保留的
                 return T_RETURN;
             }
+
+"if"        { return T_IF; }
+"else"      { return T_ELSE; }
+"while"     { return T_WHILE; }
+"break"     { return T_BREAK; }
+"continue"  { return T_CONTINUE; }
 
 [a-zA-Z_]+[0-9a-zA-Z_]* {
                 // strdup 分配的空间需要在使用完毕后使用free手动释放，否则会造成内存泄漏

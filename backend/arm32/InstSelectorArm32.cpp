@@ -28,6 +28,7 @@
 #include "GotoInstruction.h"
 #include "FuncCallInstruction.h"
 #include "MoveInstruction.h"
+#include "CondBrInstruction.h"
 
 /// @brief 构造函数
 /// @param _irCode 指令
@@ -44,6 +45,7 @@ InstSelectorArm32::InstSelectorArm32(vector<Instruction *> & _irCode,
 
     translator_handlers[IRInstOperator::IRINST_OP_LABEL] = &InstSelectorArm32::translate_label;
     translator_handlers[IRInstOperator::IRINST_OP_GOTO] = &InstSelectorArm32::translate_goto;
+    translator_handlers[IRInstOperator::IRINST_OP_COND_BR] = &InstSelectorArm32::translate_cond_br;
 
     translator_handlers[IRInstOperator::IRINST_OP_ASSIGN] = &InstSelectorArm32::translate_assign;
 
@@ -53,6 +55,14 @@ InstSelectorArm32::InstSelectorArm32(vector<Instruction *> & _irCode,
     translator_handlers[IRInstOperator::IRINST_OP_DIV_I] = &InstSelectorArm32::translate_div_int32;
     translator_handlers[IRInstOperator::IRINST_OP_MOD_I] = &InstSelectorArm32::translate_mod_int32;
     translator_handlers[IRInstOperator::IRINST_OP_NEG_I] = &InstSelectorArm32::translate_neg_int32;
+
+    // 关系运算符
+    translator_handlers[IRInstOperator::IRINST_OP_EQ_I] = &InstSelectorArm32::translate_eq_int32;
+    translator_handlers[IRInstOperator::IRINST_OP_NEQ_I] = &InstSelectorArm32::translate_neq_int32;
+    translator_handlers[IRInstOperator::IRINST_OP_LT_I] = &InstSelectorArm32::translate_lt_int32;
+    translator_handlers[IRInstOperator::IRINST_OP_LE_I] = &InstSelectorArm32::translate_le_int32;
+    translator_handlers[IRInstOperator::IRINST_OP_GT_I] = &InstSelectorArm32::translate_gt_int32;
+    translator_handlers[IRInstOperator::IRINST_OP_GE_I] = &InstSelectorArm32::translate_ge_int32;
 
     translator_handlers[IRInstOperator::IRINST_OP_FUNC_CALL] = &InstSelectorArm32::translate_call;
     translator_handlers[IRInstOperator::IRINST_OP_ARG] = &InstSelectorArm32::translate_arg;
@@ -563,4 +573,458 @@ void InstSelectorArm32::translate_arg(Instruction * inst)
     }
 
     realArgCount++;
+}
+
+/// @brief 条件分支指令翻译成ARM32汇编
+/// @param inst IR指令
+void InstSelectorArm32::translate_cond_br(Instruction * inst)
+{
+    // 动态转换为条件分支指令
+    Instanceof(condBrInst, CondBrInstruction *, inst);
+    
+    // 获取条件值、真分支标签和假分支标签
+    Value* condition = condBrInst->getCondition();
+    LabelInstruction* trueLabel = condBrInst->getTrueTarget();
+    LabelInstruction* falseLabel = condBrInst->getFalseTarget();
+    
+    if (!trueLabel || !falseLabel) {
+        minic_log(LOG_ERROR, "条件分支的目标不是标签");
+        return;
+    }
+    
+    // 加载条件值到寄存器
+    int32_t condRegNo = condition->getRegId();
+    int32_t loadCondRegNo;
+    
+    if (condRegNo == -1) {
+        // 分配一个临时寄存器
+        loadCondRegNo = simpleRegisterAllocator.Allocate();
+        // 加载条件值
+        iloc.load_var(loadCondRegNo, condition);
+    } else {
+        loadCondRegNo = condRegNo;
+    }
+    
+    // 比较条件值与0
+    iloc.inst("cmp", PlatformArm32::regName[loadCondRegNo], "#0");
+    
+    // 如果条件值不为0，跳转到真分支，否则跳转到假分支
+    // ARM汇编使用bne (branch if not equal) 指令在比较结果不等于0时跳转
+    iloc.inst("bne", trueLabel->getName());
+    
+    // 无条件跳转到假分支
+    iloc.jump(falseLabel->getName());
+    
+    // 释放临时寄存器
+    if (condRegNo == -1) {
+        simpleRegisterAllocator.free(loadCondRegNo);
+    }
+}
+
+/// @brief 整数等于比较指令翻译成ARM32汇编
+/// @param inst IR指令
+void InstSelectorArm32::translate_eq_int32(Instruction * inst)
+{
+    Value * result = inst;
+    Value * arg1 = inst->getOperand(0);
+    Value * arg2 = inst->getOperand(1);
+
+    int32_t arg1_reg_no = arg1->getRegId();
+    int32_t arg2_reg_no = arg2->getRegId();
+    int32_t result_reg_no = inst->getRegId();
+    int32_t load_result_reg_no, load_arg1_reg_no, load_arg2_reg_no;
+
+    // 看arg1是否是寄存器，若是则寄存器寻址，否则要load变量到寄存器中
+    if (arg1_reg_no == -1) {
+        // 分配一个寄存器r8
+        load_arg1_reg_no = simpleRegisterAllocator.Allocate(arg1);
+        // arg1 -> r8
+        iloc.load_var(load_arg1_reg_no, arg1);
+    } else {
+        load_arg1_reg_no = arg1_reg_no;
+    }
+
+    // 看arg2是否是寄存器，若是则寄存器寻址，否则要load变量到寄存器中
+    if (arg2_reg_no == -1) {
+        // 分配一个寄存器r9
+        load_arg2_reg_no = simpleRegisterAllocator.Allocate(arg2);
+        // arg2 -> r9
+        iloc.load_var(load_arg2_reg_no, arg2);
+    } else {
+        load_arg2_reg_no = arg2_reg_no;
+    }
+
+    // 看结果变量是否是寄存器，若不是则需要分配一个新的寄存器来保存运算的结果
+    if (result_reg_no == -1) {
+        // 分配一个寄存器r10，用于暂存结果
+        load_result_reg_no = simpleRegisterAllocator.Allocate(result);
+    } else {
+        load_result_reg_no = result_reg_no;
+    }
+
+    // 比较两个操作数
+    iloc.inst("cmp", 
+              PlatformArm32::regName[load_arg1_reg_no], 
+              PlatformArm32::regName[load_arg2_reg_no]);
+    
+    // 清零结果寄存器
+    iloc.inst("mov", 
+              PlatformArm32::regName[load_result_reg_no], 
+              "#0");
+    
+    // 如果相等，则设置结果为1
+    iloc.inst("moveq", 
+              PlatformArm32::regName[load_result_reg_no], 
+              "#1");
+
+    // 结果不是寄存器，则需要把结果保存到结果变量中
+    if (result_reg_no == -1) {
+        // r10 -> result
+        iloc.store_var(load_result_reg_no, result, ARM32_TMP_REG_NO);
+    }
+
+    // 释放寄存器
+    simpleRegisterAllocator.free(arg1);
+    simpleRegisterAllocator.free(arg2);
+    simpleRegisterAllocator.free(result);
+}
+
+/// @brief 整数不等于比较指令翻译成ARM32汇编
+/// @param inst IR指令
+void InstSelectorArm32::translate_neq_int32(Instruction * inst)
+{
+    Value * result = inst;
+    Value * arg1 = inst->getOperand(0);
+    Value * arg2 = inst->getOperand(1);
+
+    int32_t arg1_reg_no = arg1->getRegId();
+    int32_t arg2_reg_no = arg2->getRegId();
+    int32_t result_reg_no = inst->getRegId();
+    int32_t load_result_reg_no, load_arg1_reg_no, load_arg2_reg_no;
+
+    // 看arg1是否是寄存器，若是则寄存器寻址，否则要load变量到寄存器中
+    if (arg1_reg_no == -1) {
+        // 分配一个寄存器r8
+        load_arg1_reg_no = simpleRegisterAllocator.Allocate(arg1);
+        // arg1 -> r8
+        iloc.load_var(load_arg1_reg_no, arg1);
+    } else {
+        load_arg1_reg_no = arg1_reg_no;
+    }
+
+    // 看arg2是否是寄存器，若是则寄存器寻址，否则要load变量到寄存器中
+    if (arg2_reg_no == -1) {
+        // 分配一个寄存器r9
+        load_arg2_reg_no = simpleRegisterAllocator.Allocate(arg2);
+        // arg2 -> r9
+        iloc.load_var(load_arg2_reg_no, arg2);
+    } else {
+        load_arg2_reg_no = arg2_reg_no;
+    }
+
+    // 看结果变量是否是寄存器，若不是则需要分配一个新的寄存器来保存运算的结果
+    if (result_reg_no == -1) {
+        // 分配一个寄存器r10，用于暂存结果
+        load_result_reg_no = simpleRegisterAllocator.Allocate(result);
+    } else {
+        load_result_reg_no = result_reg_no;
+    }
+
+    // 比较两个操作数
+    iloc.inst("cmp", 
+              PlatformArm32::regName[load_arg1_reg_no], 
+              PlatformArm32::regName[load_arg2_reg_no]);
+    
+    // 清零结果寄存器
+    iloc.inst("mov", 
+              PlatformArm32::regName[load_result_reg_no], 
+              "#0");
+    
+    // 如果不相等，则设置结果为1
+    iloc.inst("movne", 
+              PlatformArm32::regName[load_result_reg_no], 
+              "#1");
+
+    // 结果不是寄存器，则需要把结果保存到结果变量中
+    if (result_reg_no == -1) {
+        // r10 -> result
+        iloc.store_var(load_result_reg_no, result, ARM32_TMP_REG_NO);
+    }
+
+    // 释放寄存器
+    simpleRegisterAllocator.free(arg1);
+    simpleRegisterAllocator.free(arg2);
+    simpleRegisterAllocator.free(result);
+}
+
+/// @brief 整数小于比较指令翻译成ARM32汇编
+/// @param inst IR指令
+void InstSelectorArm32::translate_lt_int32(Instruction * inst)
+{
+    Value * result = inst;
+    Value * arg1 = inst->getOperand(0);
+    Value * arg2 = inst->getOperand(1);
+
+    int32_t arg1_reg_no = arg1->getRegId();
+    int32_t arg2_reg_no = arg2->getRegId();
+    int32_t result_reg_no = inst->getRegId();
+    int32_t load_result_reg_no, load_arg1_reg_no, load_arg2_reg_no;
+
+    // 看arg1是否是寄存器，若是则寄存器寻址，否则要load变量到寄存器中
+    if (arg1_reg_no == -1) {
+        // 分配一个寄存器r8
+        load_arg1_reg_no = simpleRegisterAllocator.Allocate(arg1);
+        // arg1 -> r8
+        iloc.load_var(load_arg1_reg_no, arg1);
+    } else {
+        load_arg1_reg_no = arg1_reg_no;
+    }
+
+    // 看arg2是否是寄存器，若是则寄存器寻址，否则要load变量到寄存器中
+    if (arg2_reg_no == -1) {
+        // 分配一个寄存器r9
+        load_arg2_reg_no = simpleRegisterAllocator.Allocate(arg2);
+        // arg2 -> r9
+        iloc.load_var(load_arg2_reg_no, arg2);
+    } else {
+        load_arg2_reg_no = arg2_reg_no;
+    }
+
+    // 看结果变量是否是寄存器，若不是则需要分配一个新的寄存器来保存运算的结果
+    if (result_reg_no == -1) {
+        // 分配一个寄存器r10，用于暂存结果
+        load_result_reg_no = simpleRegisterAllocator.Allocate(result);
+    } else {
+        load_result_reg_no = result_reg_no;
+    }
+
+    // 比较两个操作数
+    iloc.inst("cmp", 
+              PlatformArm32::regName[load_arg1_reg_no], 
+              PlatformArm32::regName[load_arg2_reg_no]);
+    
+    // 清零结果寄存器
+    iloc.inst("mov", 
+              PlatformArm32::regName[load_result_reg_no], 
+              "#0");
+    
+    // 如果小于，则设置结果为1
+    iloc.inst("movlt", 
+              PlatformArm32::regName[load_result_reg_no], 
+              "#1");
+
+    // 结果不是寄存器，则需要把结果保存到结果变量中
+    if (result_reg_no == -1) {
+        // r10 -> result
+        iloc.store_var(load_result_reg_no, result, ARM32_TMP_REG_NO);
+    }
+
+    // 释放寄存器
+    simpleRegisterAllocator.free(arg1);
+    simpleRegisterAllocator.free(arg2);
+    simpleRegisterAllocator.free(result);
+}
+
+/// @brief 整数小于等于比较指令翻译成ARM32汇编
+/// @param inst IR指令
+void InstSelectorArm32::translate_le_int32(Instruction * inst)
+{
+    Value * result = inst;
+    Value * arg1 = inst->getOperand(0);
+    Value * arg2 = inst->getOperand(1);
+
+    int32_t arg1_reg_no = arg1->getRegId();
+    int32_t arg2_reg_no = arg2->getRegId();
+    int32_t result_reg_no = inst->getRegId();
+    int32_t load_result_reg_no, load_arg1_reg_no, load_arg2_reg_no;
+
+    // 看arg1是否是寄存器，若是则寄存器寻址，否则要load变量到寄存器中
+    if (arg1_reg_no == -1) {
+        // 分配一个寄存器r8
+        load_arg1_reg_no = simpleRegisterAllocator.Allocate(arg1);
+        // arg1 -> r8
+        iloc.load_var(load_arg1_reg_no, arg1);
+    } else {
+        load_arg1_reg_no = arg1_reg_no;
+    }
+
+    // 看arg2是否是寄存器，若是则寄存器寻址，否则要load变量到寄存器中
+    if (arg2_reg_no == -1) {
+        // 分配一个寄存器r9
+        load_arg2_reg_no = simpleRegisterAllocator.Allocate(arg2);
+        // arg2 -> r9
+        iloc.load_var(load_arg2_reg_no, arg2);
+    } else {
+        load_arg2_reg_no = arg2_reg_no;
+    }
+
+    // 看结果变量是否是寄存器，若不是则需要分配一个新的寄存器来保存运算的结果
+    if (result_reg_no == -1) {
+        // 分配一个寄存器r10，用于暂存结果
+        load_result_reg_no = simpleRegisterAllocator.Allocate(result);
+    } else {
+        load_result_reg_no = result_reg_no;
+    }
+
+    // 比较两个操作数
+    iloc.inst("cmp", 
+              PlatformArm32::regName[load_arg1_reg_no], 
+              PlatformArm32::regName[load_arg2_reg_no]);
+    
+    // 清零结果寄存器
+    iloc.inst("mov", 
+              PlatformArm32::regName[load_result_reg_no], 
+              "#0");
+    
+    // 如果小于等于，则设置结果为1
+    iloc.inst("movle", 
+              PlatformArm32::regName[load_result_reg_no], 
+              "#1");
+
+    // 结果不是寄存器，则需要把结果保存到结果变量中
+    if (result_reg_no == -1) {
+        // r10 -> result
+        iloc.store_var(load_result_reg_no, result, ARM32_TMP_REG_NO);
+    }
+
+    // 释放寄存器
+    simpleRegisterAllocator.free(arg1);
+    simpleRegisterAllocator.free(arg2);
+    simpleRegisterAllocator.free(result);
+}
+
+/// @brief 整数大于比较指令翻译成ARM32汇编
+/// @param inst IR指令
+void InstSelectorArm32::translate_gt_int32(Instruction * inst)
+{
+    Value * result = inst;
+    Value * arg1 = inst->getOperand(0);
+    Value * arg2 = inst->getOperand(1);
+
+    int32_t arg1_reg_no = arg1->getRegId();
+    int32_t arg2_reg_no = arg2->getRegId();
+    int32_t result_reg_no = inst->getRegId();
+    int32_t load_result_reg_no, load_arg1_reg_no, load_arg2_reg_no;
+
+    // 看arg1是否是寄存器，若是则寄存器寻址，否则要load变量到寄存器中
+    if (arg1_reg_no == -1) {
+        // 分配一个寄存器r8
+        load_arg1_reg_no = simpleRegisterAllocator.Allocate(arg1);
+        // arg1 -> r8
+        iloc.load_var(load_arg1_reg_no, arg1);
+    } else {
+        load_arg1_reg_no = arg1_reg_no;
+    }
+
+    // 看arg2是否是寄存器，若是则寄存器寻址，否则要load变量到寄存器中
+    if (arg2_reg_no == -1) {
+        // 分配一个寄存器r9
+        load_arg2_reg_no = simpleRegisterAllocator.Allocate(arg2);
+        // arg2 -> r9
+        iloc.load_var(load_arg2_reg_no, arg2);
+    } else {
+        load_arg2_reg_no = arg2_reg_no;
+    }
+
+    // 看结果变量是否是寄存器，若不是则需要分配一个新的寄存器来保存运算的结果
+    if (result_reg_no == -1) {
+        // 分配一个寄存器r10，用于暂存结果
+        load_result_reg_no = simpleRegisterAllocator.Allocate(result);
+    } else {
+        load_result_reg_no = result_reg_no;
+    }
+
+    // 比较两个操作数
+    iloc.inst("cmp", 
+              PlatformArm32::regName[load_arg1_reg_no], 
+              PlatformArm32::regName[load_arg2_reg_no]);
+    
+    // 清零结果寄存器
+    iloc.inst("mov", 
+              PlatformArm32::regName[load_result_reg_no], 
+              "#0");
+    
+    // 如果大于，则设置结果为1
+    iloc.inst("movgt", 
+              PlatformArm32::regName[load_result_reg_no], 
+              "#1");
+
+    // 结果不是寄存器，则需要把结果保存到结果变量中
+    if (result_reg_no == -1) {
+        // r10 -> result
+        iloc.store_var(load_result_reg_no, result, ARM32_TMP_REG_NO);
+    }
+
+    // 释放寄存器
+    simpleRegisterAllocator.free(arg1);
+    simpleRegisterAllocator.free(arg2);
+    simpleRegisterAllocator.free(result);
+}
+
+/// @brief 整数大于等于比较指令翻译成ARM32汇编
+/// @param inst IR指令
+void InstSelectorArm32::translate_ge_int32(Instruction * inst)
+{
+    Value * result = inst;
+    Value * arg1 = inst->getOperand(0);
+    Value * arg2 = inst->getOperand(1);
+
+    int32_t arg1_reg_no = arg1->getRegId();
+    int32_t arg2_reg_no = arg2->getRegId();
+    int32_t result_reg_no = inst->getRegId();
+    int32_t load_result_reg_no, load_arg1_reg_no, load_arg2_reg_no;
+
+    // 看arg1是否是寄存器，若是则寄存器寻址，否则要load变量到寄存器中
+    if (arg1_reg_no == -1) {
+        // 分配一个寄存器r8
+        load_arg1_reg_no = simpleRegisterAllocator.Allocate(arg1);
+        // arg1 -> r8
+        iloc.load_var(load_arg1_reg_no, arg1);
+    } else {
+        load_arg1_reg_no = arg1_reg_no;
+    }
+
+    // 看arg2是否是寄存器，若是则寄存器寻址，否则要load变量到寄存器中
+    if (arg2_reg_no == -1) {
+        // 分配一个寄存器r9
+        load_arg2_reg_no = simpleRegisterAllocator.Allocate(arg2);
+        // arg2 -> r9
+        iloc.load_var(load_arg2_reg_no, arg2);
+    } else {
+        load_arg2_reg_no = arg2_reg_no;
+    }
+
+    // 看结果变量是否是寄存器，若不是则需要分配一个新的寄存器来保存运算的结果
+    if (result_reg_no == -1) {
+        // 分配一个寄存器r10，用于暂存结果
+        load_result_reg_no = simpleRegisterAllocator.Allocate(result);
+    } else {
+        load_result_reg_no = result_reg_no;
+    }
+
+    // 比较两个操作数
+    iloc.inst("cmp", 
+              PlatformArm32::regName[load_arg1_reg_no], 
+              PlatformArm32::regName[load_arg2_reg_no]);
+    
+    // 清零结果寄存器
+    iloc.inst("mov", 
+              PlatformArm32::regName[load_result_reg_no], 
+              "#0");
+    
+    // 如果大于等于，则设置结果为1
+    iloc.inst("movge", 
+              PlatformArm32::regName[load_result_reg_no], 
+              "#1");
+
+    // 结果不是寄存器，则需要把结果保存到结果变量中
+    if (result_reg_no == -1) {
+        // r10 -> result
+        iloc.store_var(load_result_reg_no, result, ARM32_TMP_REG_NO);
+    }
+
+    // 释放寄存器
+    simpleRegisterAllocator.free(arg1);
+    simpleRegisterAllocator.free(arg2);
+    simpleRegisterAllocator.free(result);
 }

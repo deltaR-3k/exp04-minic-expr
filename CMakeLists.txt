@@ -160,6 +160,8 @@ set(IR_SRCS
 	ir/Instructions/ArgInstruction.h
 	ir/Instructions/BinaryInstruction.cpp
 	ir/Instructions/BinaryInstruction.h
+	ir/Instructions/CondBrInstruction.cpp
+	ir/Instructions/CondBrInstruction.h
 	ir/Instructions/EntryInstruction.cpp
 	ir/Instructions/EntryInstruction.h
 	ir/Instructions/ExitInstruction.cpp
@@ -379,42 +381,43 @@ add_custom_command(TARGET ${PROJECT_NAME}
 	COMMAND_EXPAND_LISTS
 )
 
-# 源代码打包
-set(CPACK_SOURCE_GENERATOR "TGZ")
-set(CPACK_SOURCE_PACKAGE_FILE_NAME "${PROJECT_NAME}-${PROJECT_VERSION}-src")
-
-# 忽略不需要源代码目录或文件
-set(CPACK_SOURCE_IGNORE_FILES
-	"/build/;" # 忽略 build 目录
-	"/cmake-build-.*/;" # cmake-build-开头的目录
-	"/.git/;" # 忽略 Git 仓库
-	"~$;" # 忽略临时文件（如编辑器产生的临时文件）
-	"/doc/;" # 忽略 doc 目录
-	"/frontend/antlr4/.antlr/;" # antlr自动产生的目录
-	"/.history/;" # 本地历史文件
-	"/tests/;" # 测试文件夹
-)
-
-# # 用于测试平台
-# set(CPACK_SOURCE_GENERATOR "ZIP")
+# # 源代码打包
+# set(CPACK_SOURCE_GENERATOR "TGZ")
+# set(CPACK_SOURCE_PACKAGE_FILE_NAME "${PROJECT_NAME}-${PROJECT_VERSION}-src")
 
 # # 忽略不需要源代码目录或文件
 # set(CPACK_SOURCE_IGNORE_FILES
-#     "/build/;" # 忽略 build 目录
-#     "/cmake-build-.*/;" # cmake-build-开头的目录
-#     "/.git/;" # 忽略 Git 仓库
-#     "~$;" # 忽略临时文件（如编辑器产生的临时文件）
-#     "/doc/;" # 忽略 doc 目录
-#     "/frontend/antlr4/.antlr/;" # antlr自动产生的目录
-#     "/.history/;" # 本地历史文件
-#     "/tests/;" # 测试文件夹
-#     "/thirdparty/;" # antlr
-#     "/tools/;" # tools
-#     "/cmake/;" # cmake
-#     "/.vs/;" # visual studio
-#     "/.vscode/;" # vscode
-#     "/.cache/;" # cache
+# 	"/build/;" # 忽略 build 目录
+# 	"/cmake-build-.*/;" # cmake-build-开头的目录
+# 	"/.git/;" # 忽略 Git 仓库
+# 	"~$;" # 忽略临时文件（如编辑器产生的临时文件）
+# 	"/doc/;" # 忽略 doc 目录
+# 	"/frontend/antlr4/.antlr/;" # antlr自动产生的目录
+# 	"/.history/;" # 本地历史文件
+# 	"/tests/;" # 测试文件夹
 # )
+
+# 用于测试平台
+set(CPACK_SOURCE_GENERATOR "ZIP")
+
+# 忽略不需要源代码目录或文件
+set(CPACK_SOURCE_IGNORE_FILES
+    "/build/;" # 忽略 build 目录
+    "/cmake-build-.*/;" # cmake-build-开头的目录
+    "/.git/;" # 忽略 Git 仓库
+    "~$;" # 忽略临时文件（如编辑器产生的临时文件）
+    "/doc/;" # 忽略 doc 目录
+    "/frontend/antlr4/.antlr/;" # antlr自动产生的目录
+    "/.history/;" # 本地历史文件
+    "/tests/;" # 测试文件夹
+    "/thirdparty/;" # antlr
+    "/tools/;" # tools
+    "/cmake/;" # cmake
+    "/.vs/;" # visual studio
+    "/.vscode/;" # vscode
+    "/.cache/;" # cache
+	"/commonclasstestcases-master/;"
+)
 
 # 二进制打包
 set(CPACK_GENERATOR "TGZ")

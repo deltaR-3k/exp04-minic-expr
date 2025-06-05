@@ -34,6 +34,9 @@ enum class IRInstOperator : std::int8_t {
     /// @brief 无条件分支指令
     IRINST_OP_GOTO,
 
+    /// @brief 条件分支指令
+    IRINST_OP_COND_BR,
+
     /// @brief 整数的加法指令，二元运算
     IRINST_OP_ADD_I,
 
@@ -51,6 +54,24 @@ enum class IRInstOperator : std::int8_t {
 
     /// @brief 整数的求负指令，一元运算
     IRINST_OP_NEG_I,
+    
+    /// @brief 整数的等于比较指令，二元运算
+    IRINST_OP_EQ_I,
+    
+    /// @brief 整数的不等于比较指令，二元运算
+    IRINST_OP_NEQ_I,
+    
+    /// @brief 整数的小于比较指令，二元运算
+    IRINST_OP_LT_I,
+    
+    /// @brief 整数的小于等于比较指令，二元运算
+    IRINST_OP_LE_I,
+    
+    /// @brief 整数的大于比较指令，二元运算
+    IRINST_OP_GT_I,
+    
+    /// @brief 整数的大于等于比较指令，二元运算
+    IRINST_OP_GE_I,
 
     /// @brief 赋值指令，一元运算
     IRINST_OP_ASSIGN,

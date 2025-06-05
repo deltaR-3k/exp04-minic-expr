@@ -17,9 +17,11 @@
 #pragma once
 
 #include <unordered_map>
+#include <stack>
 
 #include "AST.h"
 #include "Module.h"
+#include "LabelInstruction.h"
 
 /// @brief AST遍历产生线性IR类
 class IRGenerator {
@@ -91,6 +93,76 @@ protected:
     /// @param node AST节点
     /// @return 翻译是否成功，true：成功，false：失败
     bool ir_neg(ast_node * node);
+    
+    /// @brief 关系运算符相等AST节点翻译成线性中间IR
+    /// @param node AST节点
+    /// @return 翻译是否成功，true：成功，false：失败
+    bool ir_eq(ast_node * node);
+    
+    /// @brief 关系运算符不等AST节点翻译成线性中间IR
+    /// @param node AST节点
+    /// @return 翻译是否成功，true：成功，false：失败
+    bool ir_neq(ast_node * node);
+    
+    /// @brief 关系运算符小于AST节点翻译成线性中间IR
+    /// @param node AST节点
+    /// @return 翻译是否成功，true：成功，false：失败
+    bool ir_lt(ast_node * node);
+    
+    /// @brief 关系运算符小于等于AST节点翻译成线性中间IR
+    /// @param node AST节点
+    /// @return 翻译是否成功，true：成功，false：失败
+    bool ir_le(ast_node * node);
+    
+    /// @brief 关系运算符大于AST节点翻译成线性中间IR
+    /// @param node AST节点
+    /// @return 翻译是否成功，true：成功，false：失败
+    bool ir_gt(ast_node * node);
+    
+    /// @brief 关系运算符大于等于AST节点翻译成线性中间IR
+    /// @param node AST节点
+    /// @return 翻译是否成功，true：成功，false：失败
+    bool ir_ge(ast_node * node);
+    
+    /// @brief 逻辑与AST节点翻译成线性中间IR
+    /// @param node AST节点
+    /// @return 翻译是否成功，true：成功，false：失败
+    bool ir_and(ast_node * node);
+    
+    /// @brief 逻辑或AST节点翻译成线性中间IR
+    /// @param node AST节点
+    /// @return 翻译是否成功，true：成功，false：失败
+    bool ir_or(ast_node * node);
+    
+    /// @brief 逻辑非AST节点翻译成线性中间IR
+    /// @param node AST节点
+    /// @return 翻译是否成功，true：成功，false：失败
+    bool ir_not(ast_node * node);
+    
+    /// @brief if语句AST节点翻译成线性中间IR
+    /// @param node AST节点
+    /// @return 翻译是否成功，true：成功，false：失败
+    bool ir_if(ast_node * node);
+    
+    /// @brief if-else语句AST节点翻译成线性中间IR
+    /// @param node AST节点
+    /// @return 翻译是否成功，true：成功，false：失败
+    bool ir_if_else(ast_node * node);
+    
+    /// @brief while语句AST节点翻译成线性中间IR
+    /// @param node AST节点
+    /// @return 翻译是否成功，true：成功，false：失败
+    bool ir_while(ast_node * node);
+    
+    /// @brief break语句AST节点翻译成线性中间IR
+    /// @param node AST节点
+    /// @return 翻译是否成功，true：成功，false：失败
+    bool ir_break(ast_node * node);
+    
+    /// @brief continue语句AST节点翻译成线性中间IR
+    /// @param node AST节点
+    /// @return 翻译是否成功，true：成功，false：失败
+    bool ir_continue(ast_node * node);
 
     /// @brief 赋值AST节点翻译成线性中间IR
     /// @param node AST节点
@@ -141,6 +213,10 @@ protected:
     /// @param node AST节点
     /// @return 成功返回node节点，否则返回nullptr
     ast_node * ir_visit_ast_node(ast_node * node);
+    
+    /// @brief 创建新的标签指令
+    /// @return 新创建的标签指令
+    LabelInstruction * create_new_label();
 
     /// @brief AST的节点操作函数
     typedef bool (IRGenerator::*ast2ir_handler_t)(ast_node *);
@@ -154,4 +230,13 @@ private:
 
     /// @brief 符号表:模块
     Module * module;
+    
+    /// @brief 当前循环的出口标签栈，用于break语句
+    std::stack<LabelInstruction *> loopExitLabels;
+    
+    /// @brief 当前循环的入口标签栈，用于continue语句
+    std::stack<LabelInstruction *> loopEntryLabels;
+    
+    /// @brief 标签计数器，用于生成唯一的标签名
+    int labelCounter = 0;
 };

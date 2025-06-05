@@ -13,8 +13,14 @@ grammar MiniC;
 // 源文件编译单元定义
 compileUnit: (funcDef | varDecl)* EOF;
 
-// 函数定义，目前不支持形参，也不支持返回void类型等
-funcDef: T_INT T_ID T_L_PAREN T_R_PAREN block;
+// 函数定义，支持多个形参，返回类型可以是int或void
+funcDef: (T_INT | T_VOID) T_ID T_L_PAREN formalParamList? T_R_PAREN block;
+
+// 形参列表
+formalParamList: formalParam (T_COMMA formalParam)*;
+
+// 形参，类型+名称
+formalParam: basicType T_ID;
 
 // 语句块看用作函数体，这里允许多个语句，并且不含任何语句
 block: T_L_BRACE blockItemList? T_R_BRACE;
@@ -36,10 +42,14 @@ varDef: T_ID;
 
 // 目前语句支持return和赋值语句
 statement:
-	T_RETURN expr T_SEMICOLON			# returnStatement
+	T_RETURN expr? T_SEMICOLON			# returnStatement
 	| lVal T_ASSIGN expr T_SEMICOLON	# assignStatement
 	| block								# blockStatement
-	| expr? T_SEMICOLON					# expressionStatement;
+	| expr? T_SEMICOLON					# expressionStatement
+	| T_IF T_L_PAREN expr T_R_PAREN statement (T_ELSE statement)? # ifStatement
+	| T_WHILE T_L_PAREN expr T_R_PAREN statement # whileStatement
+	| T_BREAK T_SEMICOLON # breakStatement
+	| T_CONTINUE T_SEMICOLON # continueStatement;
 
 // 表达式文法 expr : AddExp 表达式支持加减乘除求余运算
 expr: addExp;
@@ -89,6 +99,11 @@ T_MOD: '%';
 T_RETURN: 'return';
 T_INT: 'int';
 T_VOID: 'void';
+T_IF: 'if';
+T_ELSE: 'else';
+T_WHILE: 'while';
+T_BREAK: 'break';
+T_CONTINUE: 'continue';
 
 T_ID: [a-zA-Z_][a-zA-Z0-9_]*;
 T_DIGIT: '0' [0-7]* | '0' [xX] [0-9a-fA-F]+ | [1-9][0-9]*;

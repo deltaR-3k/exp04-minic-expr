@@ -65,6 +65,36 @@ void BinaryInstruction::toString(std::string & str)
             // 求余指令，二元运算
             str = getIRName() + " = mod " + src1->getIRName() + "," + src2->getIRName();
             break;
+            
+        case IRInstOperator::IRINST_OP_EQ_I:
+            // 等于比较指令，二元运算
+            str = getIRName() + " = icmp eq " + src1->getIRName() + ", " + src2->getIRName();
+            break;
+            
+        case IRInstOperator::IRINST_OP_NEQ_I:
+            // 不等于比较指令，二元运算
+            str = getIRName() + " = icmp ne " + src1->getIRName() + ", " + src2->getIRName();
+            break;
+            
+        case IRInstOperator::IRINST_OP_LT_I:
+            // 小于比较指令，二元运算
+            str = getIRName() + " = icmp lt " + src1->getIRName() + ", " + src2->getIRName();
+            break;
+            
+        case IRInstOperator::IRINST_OP_LE_I:
+            // 小于等于比较指令，二元运算
+            str = getIRName() + " = icmp le " + src1->getIRName() + ", " + src2->getIRName();
+            break;
+            
+        case IRInstOperator::IRINST_OP_GT_I:
+            // 大于比较指令，二元运算
+            str = getIRName() + " = icmp gt " + src1->getIRName() + ", " + src2->getIRName();
+            break;
+            
+        case IRInstOperator::IRINST_OP_GE_I:
+            // 大于等于比较指令，二元运算
+            str = getIRName() + " = icmp ge " + src1->getIRName() + ", " + src2->getIRName();
+            break;
 
         default:
             // 未知指令

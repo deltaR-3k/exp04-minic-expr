@@ -44,6 +44,9 @@ void yyerror(char * msg);
 // 关键或保留字 一词一类 不需要赋予语义属性
 %token T_RETURN
 
+// 新增关键字
+%token T_IF T_ELSE T_WHILE T_BREAK T_CONTINUE
+
 // 分隔符 一词一类 不需要赋予语义属性
 %token T_SEMICOLON T_L_PAREN T_R_PAREN T_L_BRACE T_R_BRACE
 %token T_COMMA
@@ -51,10 +54,20 @@ void yyerror(char * msg);
 // 运算符
 %token T_ASSIGN T_SUB T_ADD T_MUL T_DIV T_MOD
 
+// 关系运算符
+%token T_EQ T_NEQ T_LT T_LE T_GT T_GE
+
+// 逻辑运算符
+%token T_AND T_OR T_NOT
+
 // 定义运算符优先级和结合性
+%left T_OR
+%left T_AND
+%left T_EQ T_NEQ
+%left T_LT T_LE T_GT T_GE
 %left T_ADD T_SUB
 %left T_MUL T_DIV T_MOD
-%right UMINUS  // 单目求负运算符的优先级
+%right UMINUS T_NOT  // 单目求负运算符和逻辑非的优先级
 
 // 非终结符
 // %type指定文法的非终结符号，<>可指定文法属性
@@ -69,8 +82,10 @@ void yyerror(char * msg);
 %type <node> VarDecl VarDeclExpr VarDef
 %type <node> AddExp MulExp UnaryExp PrimaryExp
 %type <node> RealParamList
+%type <node> CondExpr LOrExp LAndExp EqExp RelExp
+%type <node> IfStmt WhileStmt
 %type <type> BasicType
-%type <op_class> AddOp MulOp
+%type <op_class> AddOp MulOp RelOp EqOp
 %%
 
 // 编译单元可包含若干个函数与全局变量定义。要在语义分析时检查main函数存在
@@ -254,6 +269,106 @@ Statement : T_RETURN Expr T_SEMICOLON {
 		// 直接返回空指针，需要再把语句加入到语句块时要注意判断，空语句不要加入
 		$$ = nullptr;
 	}
+	| IfStmt {
+		// if语句或if-else语句
+		$$ = $1;
+	}
+	| WhileStmt {
+		// while语句
+		$$ = $1;
+	}
+	| T_BREAK T_SEMICOLON {
+		// break语句
+		$$ = create_contain_node(ast_operator_type::AST_OP_BREAK);
+	}
+	| T_CONTINUE T_SEMICOLON {
+		// continue语句
+		$$ = create_contain_node(ast_operator_type::AST_OP_CONTINUE);
+	}
+	;
+
+// if语句和if-else语句
+IfStmt : T_IF T_L_PAREN CondExpr T_R_PAREN Statement {
+		// if语句
+		$$ = create_contain_node(ast_operator_type::AST_OP_IF, $3, $5);
+	}
+	| T_IF T_L_PAREN CondExpr T_R_PAREN Statement T_ELSE Statement {
+		// if-else语句
+		$$ = create_contain_node(ast_operator_type::AST_OP_IF_ELSE, $3, $5, $7);
+	}
+	;
+
+// while语句
+WhileStmt : T_WHILE T_L_PAREN CondExpr T_R_PAREN Statement {
+		// while语句
+		$$ = create_contain_node(ast_operator_type::AST_OP_WHILE, $3, $5);
+	}
+	;
+
+// 条件表达式（逻辑表达式）
+CondExpr : LOrExp {
+		$$ = $1;
+	}
+	;
+
+// 逻辑或表达式
+LOrExp : LAndExp {
+		$$ = $1;
+	}
+	| LOrExp T_OR LAndExp {
+		$$ = create_contain_node(ast_operator_type::AST_OP_OR, $1, $3);
+	}
+	;
+
+// 逻辑与表达式
+LAndExp : EqExp {
+		$$ = $1;
+	}
+	| LAndExp T_AND EqExp {
+		$$ = create_contain_node(ast_operator_type::AST_OP_AND, $1, $3);
+	}
+	;
+
+// 相等性表达式
+EqExp : RelExp {
+		$$ = $1;
+	}
+	| EqExp EqOp RelExp {
+		$$ = create_contain_node(ast_operator_type($2), $1, $3);
+	}
+	;
+
+// 相等性运算符
+EqOp : T_EQ {
+		$$ = (int)ast_operator_type::AST_OP_EQ;
+	}
+	| T_NEQ {
+		$$ = (int)ast_operator_type::AST_OP_NEQ;
+	}
+	;
+
+// 关系表达式
+RelExp : AddExp {
+		$$ = $1;
+	}
+	| RelExp RelOp AddExp {
+		$$ = create_contain_node(ast_operator_type($2), $1, $3);
+	}
+	;
+
+// 关系运算符
+RelOp : T_LT {
+		$$ = (int)ast_operator_type::AST_OP_LT;
+	}
+	| T_LE {
+		$$ = (int)ast_operator_type::AST_OP_LE;
+	}
+	| T_GT {
+		$$ = (int)ast_operator_type::AST_OP_GT;
+	}
+	| T_GE {
+		$$ = (int)ast_operator_type::AST_OP_GE;
+	}
 	;
 
 // 表达式文法 expr : AddExp
@@ -327,6 +442,10 @@ UnaryExp : PrimaryExp {
 
 		// 创建单目求负运算节点，其孩子为UnaryExp($2)
 		$$ = create_contain_node(ast_operator_type::AST_OP_NEG, $2);
+	}
+	| T_NOT UnaryExp {
+		// 逻辑非运算
+		$$ = create_contain_node(ast_operator_type::AST_OP_NOT, $2);
 	}
 	| T_ID T_L_PAREN T_R_PAREN {
 		// 没有实参的函数调用
