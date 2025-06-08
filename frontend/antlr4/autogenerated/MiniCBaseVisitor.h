@@ -23,6 +23,14 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitFormalParamList(MiniCParser::FormalParamListContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitFormalParam(MiniCParser::FormalParamContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitBlock(MiniCParser::BlockContext *ctx) override {
     return visitChildren(ctx);
   }
@@ -60,6 +68,22 @@ public:
   }
 
   virtual std::any visitExpressionStatement(MiniCParser::ExpressionStatementContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitIfStatement(MiniCParser::IfStatementContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitWhileStatement(MiniCParser::WhileStatementContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitBreakStatement(MiniCParser::BreakStatementContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitContinueStatement(MiniCParser::ContinueStatementContext *ctx) override {
     return visitChildren(ctx);
   }
 

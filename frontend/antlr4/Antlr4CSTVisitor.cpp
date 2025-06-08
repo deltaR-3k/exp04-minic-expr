@@ -76,35 +76,23 @@ std::any MiniCCSTVisitor::visitCompileUnit(MiniCParser::CompileUnitContext * ctx
 /// @param ctx CST上下文
 std::any MiniCCSTVisitor::visitFuncDef(MiniCParser::FuncDefContext * ctx)
 {
-    // 识别的文法产生式：funcDef : (T_INT | T_VOID) T_ID T_L_PAREN formalParamList? T_R_PAREN block;
+    // 识别的文法产生式：funcDef : T_INT T_ID T_L_PAREN T_R_PAREN block;
 
     // 函数返回类型，终结符
-    type_attr funcReturnType;
-    if (ctx->T_INT()) {
-        funcReturnType = {BasicType::TYPE_INT, (int64_t) ctx->T_INT()->getSymbol()->getLine()};
-    } else if (ctx->T_VOID()) {
-        funcReturnType = {BasicType::TYPE_VOID, (int64_t) ctx->T_VOID()->getSymbol()->getLine()};
-    }
+    type_attr funcReturnType{BasicType::TYPE_INT, (int64_t) ctx->T_INT()->getSymbol()->getLine()};
 
     // 创建函数名的标识符终结符节点，终结符
     char * id = strdup(ctx->T_ID()->getText().c_str());
 
     var_id_attr funcId{id, (int64_t) ctx->T_ID()->getSymbol()->getLine()};
 
-    // 形参节点
+    // 形参结点目前没有，设置为空指针
     ast_node * formalParamsNode = nullptr;
-    if (ctx->formalParamList()) {
-        // 有形参列表，获取形参节点
-        formalParamsNode = std::any_cast<ast_node *>(visitFormalParamList(ctx->formalParamList()));
-    } else {
-        // 没有形参，创建一个空的形参节点
-        formalParamsNode = create_contain_node(ast_operator_type::AST_OP_FUNC_FORMAL_PARAMS);
-    }
 
     // 遍历block结点创建函数体节点，非终结符
     auto blockNode = std::any_cast<ast_node *>(visitBlock(ctx->block()));
 
-    // 创建函数定义的节点，孩子有类型，函数名，语句块和形参
+    // 创建函数定义的节点，孩子有类型，函数名，语句块和形参(实际上无)
     // create_func_def函数内会释放funcId中指向的标识符空间，切记，之后不要再释放，之前一定要是通过strdup函数或者malloc分配的空间
     return create_func_def(funcReturnType, funcId, blockNode, formalParamsNode);
 }
@@ -192,19 +180,13 @@ std::any MiniCCSTVisitor::visitStatement(MiniCParser::StatementContext * ctx)
 ///
 std::any MiniCCSTVisitor::visitReturnStatement(MiniCParser::ReturnStatementContext * ctx)
 {
-    // 识别的文法产生式：returnStatement -> T_RETURN expr? T_SEMICOLON
+    // 识别的文法产生式：returnStatement -> T_RETURN expr T_SEMICOLON
 
-    // 如果有表达式，则遍历表达式
-    if (ctx->expr()) {
-        // 非终结符，表达式expr遍历
-        auto exprNode = std::any_cast<ast_node *>(visitExpr(ctx->expr()));
-        
-        // 创建返回节点，其孩子为Expr
-        return create_contain_node(ast_operator_type::AST_OP_RETURN, exprNode);
-    } else {
-        // 没有表达式，创建空的返回节点
-        return create_contain_node(ast_operator_type::AST_OP_RETURN);
-    }
+    // 非终结符，表达式expr遍历
+    auto exprNode = std::any_cast<ast_node *>(visitExpr(ctx->expr()));
+
+    // 创建返回节点，其孩子为Expr
+    return create_contain_node(ast_operator_type::AST_OP_RETURN, exprNode);
 }
 
 /// @brief 非终结运算符expr的遍历
@@ -339,151 +321,35 @@ std::any MiniCCSTVisitor::visitMulOp(MiniCParser::MulOpContext * ctx)
     }
 }
 
-///
-/// @brief 非终结符unaryExp的分析
-/// @param ctx CST上下文
-/// @return std::any AST的节点
-///
 std::any MiniCCSTVisitor::visitUnaryExp(MiniCParser::UnaryExpContext * ctx)
 {
-    // 识别的文法产生式：unaryExp: primaryExp | T_SUB unaryExp | T_ID T_L_PAREN realParamList? T_R_PAREN;
-    
+    // 识别文法产生式：unaryExp: primaryExp | T_SUB unaryExp | T_ID T_L_PAREN realParamList? T_R_PAREN;
+
     if (ctx->primaryExp()) {
-        // 基本表达式
+        // 普通表达式
         return visitPrimaryExp(ctx->primaryExp());
     } else if (ctx->T_SUB()) {
-        // 一元求负表达式
-        auto unaryExprNode = std::any_cast<ast_node *>(visitUnaryExp(ctx->unaryExp()));
-        
-        // 使用零减去表达式的方式实现负号操作
-        // 创建常量0节点
-        digit_int_attr zeroAttr;
-        zeroAttr.val = 0;
-        zeroAttr.lineno = ctx->T_SUB()->getSymbol()->getLine();
-        ast_node * zeroNode = ast_node::New(zeroAttr);
-        
-        // 创建一元求负节点
-        return create_contain_node(ast_operator_type::AST_OP_NEG, zeroNode, unaryExprNode, nullptr);
+        // 单目求负运算
+        auto operand = std::any_cast<ast_node *>(visitUnaryExp(ctx->unaryExp()));
+        return ast_node::New(ast_operator_type::AST_OP_NEG, operand, nullptr);
     } else if (ctx->T_ID()) {
-        // 函数调用表达式
-        std::string funcName = ctx->T_ID()->getText();
-        int64_t lineNo = ctx->T_ID()->getSymbol()->getLine();
-        
-        // 创建函数名节点
-        var_id_attr funcId{strdup(funcName.c_str()), lineNo};
-        ast_node * funcIdNode = ast_node::New(funcId);
-        
-        // 创建实参列表节点
-        ast_node * realParamsNode = nullptr;
+        // 创建函数调用名终结符节点
+        ast_node * funcname_node = ast_node::New(ctx->T_ID()->getText(), (int64_t) ctx->T_ID()->getSymbol()->getLine());
+
+        // 实参列表
+        ast_node * paramListNode = nullptr;
+
+        // 函数调用
         if (ctx->realParamList()) {
-            realParamsNode = std::any_cast<ast_node *>(visitRealParamList(ctx->realParamList()));
-        } else {
-            // 创建空的实参列表节点
-            realParamsNode = create_contain_node(ast_operator_type::AST_OP_FUNC_REAL_PARAMS);
+            // 有参数
+            paramListNode = std::any_cast<ast_node *>(visitRealParamList(ctx->realParamList()));
         }
-        
-        // 创建函数调用节点
-        ast_node * funcCallNode = create_contain_node(ast_operator_type::AST_OP_FUNC_CALL, funcIdNode, realParamsNode, nullptr);
-        funcCallNode->name = funcName;
-        
-        return funcCallNode;
-    }
-    
-    return nullptr;
-}
 
-///
-/// @brief 非终结符RealParamList的分析
-/// @param ctx CST上下文
-/// @return std::any AST的节点
-///
-std::any MiniCCSTVisitor::visitRealParamList(MiniCParser::RealParamListContext * ctx)
-{
-    // 识别的文法产生式：realParamList: expr (T_COMMA expr)*;
-    
-    // 创建实参列表节点
-    ast_node * realParamsNode = create_contain_node(ast_operator_type::AST_OP_FUNC_REAL_PARAMS);
-    
-    // 处理所有实参表达式
-    for (auto exprCtx : ctx->expr()) {
-        ast_node * exprNode = std::any_cast<ast_node *>(visitExpr(exprCtx));
-        realParamsNode->insert_son_node(exprNode);
-    }
-    
-    return realParamsNode;
-}
-
-///
-/// @brief 内部产生的非终结符ifStatement的分析
-/// @param ctx CST上下文
-/// @return std::any AST的节点
-///
-std::any MiniCCSTVisitor::visitIfStatement(MiniCParser::IfStatementContext * ctx)
-{
-    // 识别的文法产生式：T_IF T_L_PAREN expr T_R_PAREN statement (T_ELSE statement)?
-    
-    // 条件表达式
-    auto condExpr = std::any_cast<ast_node *>(visitExpr(ctx->expr()));
-    
-    // if分支
-    auto thenStmt = std::any_cast<ast_node *>(visitStatement(ctx->statement(0)));
-    
-    if (ctx->T_ELSE()) {
-        // 有else分支
-        auto elseStmt = std::any_cast<ast_node *>(visitStatement(ctx->statement(1)));
-        
-        // 创建if-else节点
-        return create_contain_node(ast_operator_type::AST_OP_IF_ELSE, condExpr, thenStmt, elseStmt, nullptr);
+        // 创建函数调用节点，其孩子为被调用函数名和实参，
+        return create_func_call(funcname_node, paramListNode);
     } else {
-        // 没有else分支
-        // 创建if节点
-        return create_contain_node(ast_operator_type::AST_OP_IF, condExpr, thenStmt, nullptr);
+        return nullptr;
     }
-}
-
-///
-/// @brief 内部产生的非终结符whileStatement的分析
-/// @param ctx CST上下文
-/// @return std::any AST的节点
-///
-std::any MiniCCSTVisitor::visitWhileStatement(MiniCParser::WhileStatementContext * ctx)
-{
-    // 识别的文法产生式：T_WHILE T_L_PAREN expr T_R_PAREN statement
-    
-    // 条件表达式
-    auto condExpr = std::any_cast<ast_node *>(visitExpr(ctx->expr()));
-    
-    // 循环体
-    auto bodyStmt = std::any_cast<ast_node *>(visitStatement(ctx->statement()));
-    
-    // 创建while节点
-    return create_contain_node(ast_operator_type::AST_OP_WHILE, condExpr, bodyStmt, nullptr);
-}
-
-///
-/// @brief 内部产生的非终结符breakStatement的分析
-/// @param ctx CST上下文
-/// @return std::any AST的节点
-///
-std::any MiniCCSTVisitor::visitBreakStatement(MiniCParser::BreakStatementContext * ctx)
-{
-    // 识别的文法产生式：T_BREAK T_SEMICOLON
-    
-    // 创建break节点
-    return create_contain_node(ast_operator_type::AST_OP_BREAK);
-}
-
-///
-/// @brief 内部产生的非终结符continueStatement的分析
-/// @param ctx CST上下文
-/// @return std::any AST的节点
-///
-std::any MiniCCSTVisitor::visitContinueStatement(MiniCParser::ContinueStatementContext * ctx)
-{
-    // 识别的文法产生式：T_CONTINUE T_SEMICOLON
-    
-    // 创建continue节点
-    return create_contain_node(ast_operator_type::AST_OP_CONTINUE);
 }
 
 std::any MiniCCSTVisitor::visitPrimaryExp(MiniCParser::PrimaryExpContext * ctx)
@@ -592,42 +458,20 @@ std::any MiniCCSTVisitor::visitBasicType(MiniCParser::BasicTypeContext * ctx)
     return attr;
 }
 
-std::any MiniCCSTVisitor::visitFormalParamList(MiniCParser::FormalParamListContext * ctx)
+std::any MiniCCSTVisitor::visitRealParamList(MiniCParser::RealParamListContext * ctx)
 {
-    // 识别的文法产生式：formalParamList: formalParam (T_COMMA formalParam)*;
-    
-    // 创建形参列表节点
-    ast_node * formalParamsNode = create_contain_node(ast_operator_type::AST_OP_FUNC_FORMAL_PARAMS);
-    
-    // 处理所有形参
-    for (auto paramCtx : ctx->formalParam()) {
-        ast_node * paramNode = std::any_cast<ast_node *>(visitFormalParam(paramCtx));
-        formalParamsNode->insert_son_node(paramNode);
-    }
-    
-    return formalParamsNode;
-}
+    // 识别的文法产生式：realParamList : expr (T_COMMA expr)*;
 
-/// @brief 非终结运算符formalParam的遍历
-/// @param ctx CST上下文
-/// @return AST的节点
-std::any MiniCCSTVisitor::visitFormalParam(MiniCParser::FormalParamContext * ctx)
-{
-    // 识别的文法产生式：formalParam: basicType T_ID;
-    
-    // 获取参数类型
-    auto typeNode = std::any_cast<ast_node *>(visitBasicType(ctx->basicType()));
-    BasicType paramType = static_cast<BasicType>(typeNode->integer_val);
-    
-    // 获取参数名
-    std::string paramName = ctx->T_ID()->getText();
-    int64_t lineNo = ctx->T_ID()->getSymbol()->getLine();
-    
-    // 创建形参节点
-    ast_node * paramNode = create_func_formal_param(lineNo, paramName.c_str());
-    paramNode->type = IntegerType::getTypeInt(); // 目前只支持int类型参数
-    
-    return paramNode;
+    auto paramListNode = create_contain_node(ast_operator_type::AST_OP_FUNC_REAL_PARAMS);
+
+    for (auto paramCtx: ctx->expr()) {
+
+        auto paramNode = std::any_cast<ast_node *>(visitExpr(paramCtx));
+
+        paramListNode->insert_son_node(paramNode);
+    }
+
+    return paramListNode;
 }
 
 std::any MiniCCSTVisitor::visitExpressionStatement(MiniCParser::ExpressionStatementContext * ctx)

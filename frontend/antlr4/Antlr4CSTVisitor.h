@@ -46,16 +46,6 @@ protected:
     /// @param ctx CST上下文
     /// @return AST的节点
     std::any visitFuncDef(MiniCParser::FuncDefContext * ctx) override;
-    
-    /// @brief 非终结运算符formalParamList的遍历
-    /// @param ctx CST上下文
-    /// @return AST的节点
-    std::any visitFormalParamList(MiniCParser::FormalParamListContext * ctx) override;
-    
-    /// @brief 非终结运算符formalParam的遍历
-    /// @param ctx CST上下文
-    /// @return AST的节点
-    std::any visitFormalParam(MiniCParser::FormalParamContext * ctx) override;
 
     /// @brief 非终结运算符block的遍历
     /// @param ctx CST上下文
@@ -100,34 +90,6 @@ protected:
     /// @return std::any AST的节点
     ///
     std::any visitBlockStatement(MiniCParser::BlockStatementContext * ctx) override;
-    
-    ///
-    /// @brief 内部产生的非终结符ifStatement的分析
-    /// @param ctx CST上下文
-    /// @return std::any AST的节点
-    ///
-    std::any visitIfStatement(MiniCParser::IfStatementContext * ctx) override;
-    
-    ///
-    /// @brief 内部产生的非终结符whileStatement的分析
-    /// @param ctx CST上下文
-    /// @return std::any AST的节点
-    ///
-    std::any visitWhileStatement(MiniCParser::WhileStatementContext * ctx) override;
-    
-    ///
-    /// @brief 内部产生的非终结符breakStatement的分析
-    /// @param ctx CST上下文
-    /// @return std::any AST的节点
-    ///
-    std::any visitBreakStatement(MiniCParser::BreakStatementContext * ctx) override;
-    
-    ///
-    /// @brief 内部产生的非终结符continueStatement的分析
-    /// @param ctx CST上下文
-    /// @return std::any AST的节点
-    ///
-    std::any visitContinueStatement(MiniCParser::ContinueStatementContext * ctx) override;
 
     ///
     /// @brief 非终结符AddExp的分析
