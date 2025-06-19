@@ -2,7 +2,7 @@
 /// @file ArrayType.h
 /// @brief 数组类型描述类
 ///
-/// @author zenglj (zenglj@live.com)
+/// @author chensp
 /// @version 1.0
 /// @date 2024-12-05
 ///
@@ -11,7 +11,7 @@
 /// @par 修改日志:
 /// <table>
 /// <tr><th>Date       <th>Version <th>Author  <th>Description
-/// <tr><td>2024-12-05 <td>1.0     <td>zenglj  <td>新建
+/// <tr><td>2024-12-05 <td>1.0     <td>chensp  <td>新建
 /// </table>
 ///
 
