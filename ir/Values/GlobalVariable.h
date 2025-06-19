@@ -18,6 +18,7 @@
 
 #include "GlobalValue.h"
 #include "IRConstant.h"
+#include "ArrayType.h"
 
 ///
 /// @brief 全局变量，寻址时通过符号名或变量名来寻址
@@ -84,12 +85,49 @@ public:
     }
 
     ///
+    /// @brief 设置全局变量的初始化值
+    /// @param val 初始化值
+    ///
+    void setInitValue(ConstInt * val)
+    {
+        this->initValue = val;
+        this->inBSSSection = false;  // 有初始化值，不在BSS段
+    }
+    
+    ///
+    /// @brief 获取全局变量的初始化值
+    /// @return ConstInt* 初始化值，如果没有则返回nullptr
+    ///
+    ConstInt * getInitValue() const
+    {
+        return this->initValue;
+    }
+
+    ///
     /// @brief Declare指令IR显示
     /// @param str
     ///
     void toDeclareString(std::string & str)
     {
-        str = "declare " + getType()->toString() + " " + getIRName();
+        // 如果有初始化值，使用赋值格式：@var = value
+        if (initValue != nullptr) {
+            str = "declare " + getType()->toString() + " " + getIRName() + " = " + std::to_string(initValue->getVal());
+            return;
+        }
+        
+        if (getType()->isArrayType()) {
+            // 数组类型：declare i32 @a[5]
+            ArrayType * arrayType = static_cast<ArrayType *>(getType());
+            std::string elementTypeStr = arrayType->getElementType()->toString();
+            std::string varNameWithDims = getIRName();
+            for (int dim : arrayType->getDimensions()) {
+                varNameWithDims += "[" + std::to_string(dim) + "]";
+            }
+            str = "declare " + elementTypeStr + " " + varNameWithDims;
+        } else {
+            // 普通变量：declare i32 @var
+            str = "declare " + getType()->toString() + " " + getIRName();
+        }
     }
 
 private:
@@ -102,4 +140,9 @@ private:
     /// @brief 默认全局变量在BSS段，没有初始化，或者即使初始化过，但都值都为0
     ///
     bool inBSSSection = true;
+    
+    ///
+    /// @brief 全局变量的初始化值
+    ///
+    ConstInt * initValue = nullptr;
 };

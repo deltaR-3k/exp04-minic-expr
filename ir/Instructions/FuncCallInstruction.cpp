@@ -17,6 +17,7 @@
 #include "Function.h"
 #include "Common.h"
 #include "Type.h"
+#include "ArrayType.h"
 
 /// @brief 含有参数的函数调用
 /// @param srcVal 函数的实参Value
@@ -70,7 +71,26 @@ void FuncCallInstruction::toString(std::string & str)
 
             auto operand = getOperand(k);
 
-            str += operand->getType()->toString() + " " + operand->getIRName();
+            if (operand->getType()->isArrayType()) {
+                // 数组参数：i32 %var[0][2][3] 格式（第一维为0表示未知大小）
+                ArrayType * arrayType = static_cast<ArrayType *>(operand->getType());
+                std::string elementTypeStr = arrayType->getElementType()->toString();
+                std::string varNameWithDims = operand->getIRName();
+                
+                const std::vector<int> & dimensions = arrayType->getDimensions();
+                for (size_t i = 0; i < dimensions.size(); i++) {
+                    if (i == 0) {
+                        // 第一维设为0，表示未知大小
+                        varNameWithDims += "[0]";
+                    } else {
+                        varNameWithDims += "[" + std::to_string(dimensions[i]) + "]";
+                    }
+                }
+                str += elementTypeStr + " " + varNameWithDims;
+            } else {
+                // 普通参数
+                str += operand->getType()->toString() + " " + operand->getIRName();
+            }
 
             if (k != (operandsNum - 1)) {
                 str += ", ";

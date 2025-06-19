@@ -42,6 +42,10 @@
 ")"         { return T_R_PAREN; }
 "{"         { return T_L_BRACE; }
 "}"         { return T_R_BRACE; }
+"["         { return T_L_BRACKET; }
+"]"         { return T_R_BRACKET; }
+"["         { return T_L_BRACKET; }
+"]"         { return T_R_BRACKET; }
 
 ";"         { return T_SEMICOLON; }
 ","         { return T_COMMA; }
@@ -93,6 +97,13 @@
                 yylval.type.type = BasicType::TYPE_INT;
                 yylval.type.lineno = yylineno;
                 return T_INT;
+            }
+
+"void"      {
+                // void类型关键字
+                yylval.type.type = BasicType::TYPE_VOID;
+                yylval.type.lineno = yylineno;
+                return T_VOID;
             }
 
 "return"    {

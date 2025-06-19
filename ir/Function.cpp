@@ -19,6 +19,7 @@
 
 #include "IRConstant.h"
 #include "Function.h"
+#include "ArrayType.h"
 
 /// @brief 指定函数名字、函数类型的构造函数
 /// @param _name 函数名称
@@ -91,7 +92,20 @@ void Function::toString(std::string & str)
             str += ", ";
         }
 
-        std::string param_str = param->getType()->toString() + param->getIRName();
+        std::string param_str;
+        if (param->getType()->isArrayType()) {
+            // 数组参数：i32 %t0[0][5] 格式
+            ArrayType * arrayType = static_cast<ArrayType *>(param->getType());
+            std::string elementTypeStr = arrayType->getElementType()->toString();
+            std::string varNameWithDims = param->getIRName();
+            for (int dim : arrayType->getDimensions()) {
+                varNameWithDims += "[" + std::to_string(dim) + "]";
+            }
+            param_str = elementTypeStr + " " + varNameWithDims;
+        } else {
+            // 普通参数：i32%t0 格式
+            param_str = param->getType()->toString() + param->getIRName();
+        }
 
         str += param_str;
     }
@@ -104,7 +118,19 @@ void Function::toString(std::string & str)
     for (auto & var: this->varsVector) {
 
         // 局部变量和临时变量需要输出declare语句
-        str += "\tdeclare " + var->getType()->toString() + " " + var->getIRName();
+        if (var->getType()->isArrayType()) {
+            // 数组类型：declare i32 %l1[4][2]
+            ArrayType * arrayType = static_cast<ArrayType *>(var->getType());
+            std::string elementTypeStr = arrayType->getElementType()->toString();
+            std::string varNameWithDims = var->getIRName();
+            for (int dim : arrayType->getDimensions()) {
+                varNameWithDims += "[" + std::to_string(dim) + "]";
+            }
+            str += "\tdeclare " + elementTypeStr + " " + varNameWithDims;
+        } else {
+            // 普通变量：declare i32 %var
+            str += "\tdeclare " + var->getType()->toString() + " " + var->getIRName();
+        }
 
         std::string extraStr;
         std::string realName = var->getName();

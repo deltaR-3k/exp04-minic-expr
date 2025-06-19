@@ -18,6 +18,7 @@
 #include "ScopeStack.h"
 #include "Common.h"
 #include "VoidType.h"
+#include "PointerType.h"
 
 Module::Module(std::string _name) : name(_name)
 {
@@ -33,6 +34,26 @@ Module::Module(std::string _name) : name(_name)
     
     // 加入内置函数putch
     (void) newFunction("putch", VoidType::getType(), {new FormalParam{IntegerType::getTypeInt(), ""}}, true);
+    
+    // 加入内置函数getch
+    (void) newFunction("getch", IntegerType::getTypeInt(), {}, true);
+    
+    // 加入内置函数getarray
+    // getarray函数：接受一个数组参数，返回数组长度
+    std::vector<FormalParam*> getarray_params;
+    getarray_params.push_back(new FormalParam(const_cast<Type*>(static_cast<const Type*>(PointerType::get(IntegerType::getTypeInt()))), ""));
+    (void) newFunction("getarray", IntegerType::getTypeInt(), getarray_params, true);
+    
+    // 加入内置函数putarray
+    // putarray函数：接受数组长度和数组参数，无返回值
+    std::vector<FormalParam*> putarray_params;
+    putarray_params.push_back(new FormalParam(IntegerType::getTypeInt(), ""));
+    putarray_params.push_back(new FormalParam(const_cast<Type*>(static_cast<const Type*>(PointerType::get(IntegerType::getTypeInt()))), ""));
+    (void) newFunction("putarray", VoidType::getType(), putarray_params, true);
+    
+    // 加入内置函数putstr
+    // 注意：这里简化处理，实际上putstr需要字符串类型参数
+    // (void) newFunction("putstr", VoidType::getType(), {new FormalParam{IntegerType::getTypeInt(), ""}}, true);
 }
 
 /// @brief 进入作用域，如进入函数体块、语句块等

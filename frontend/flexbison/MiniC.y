@@ -39,7 +39,7 @@ void yyerror(char * msg);
 // %token或%type之后的<>括住的内容成为文法符号的属性，定义在前面的%union中的成员名字。
 %token <integer_num> T_DIGIT
 %token <var_id> T_ID
-%token <type> T_INT
+%token <type> T_INT T_VOID
 
 // 关键或保留字 一词一类 不需要赋予语义属性
 %token T_RETURN
@@ -49,6 +49,7 @@ void yyerror(char * msg);
 
 // 分隔符 一词一类 不需要赋予语义属性
 %token T_SEMICOLON T_L_PAREN T_R_PAREN T_L_BRACE T_R_BRACE
+%token T_L_BRACKET T_R_BRACKET
 %token T_COMMA
 
 // 运算符
@@ -80,10 +81,12 @@ void yyerror(char * msg);
 %type <node> Expr
 %type <node> LVal
 %type <node> VarDecl VarDeclExpr VarDef
+%type <node> ArrayDimensions ArrayDim ArraySubscripts
 %type <node> AddExp MulExp UnaryExp PrimaryExp
 %type <node> RealParamList
 %type <node> CondExpr LOrExp LAndExp EqExp RelExp
 %type <node> IfStmt WhileStmt
+%type <node> FormalParamList FormalParam
 %type <type> BasicType
 %type <op_class> AddOp MulOp RelOp EqOp
 %%
@@ -117,7 +120,7 @@ CompileUnit : FuncDef {
 	}
 	;
 
-// 函数定义，目前支持整数返回类型，不支持形参
+// 函数定义，支持整数和void返回类型，支持形参
 FuncDef : BasicType T_ID T_L_PAREN T_R_PAREN Block  {
 
 		// 函数返回类型
@@ -134,6 +137,23 @@ FuncDef : BasicType T_ID T_L_PAREN T_R_PAREN Block  {
 
 		// 创建函数定义的节点，孩子有类型，函数名，语句块和形参(实际上无)
 		// create_func_def函数内会释放funcId中指向的标识符空间，切记，之后不要再释放，之前一定要是通过strdup函数或者malloc分配的空间
+		$$ = create_func_def(funcReturnType, funcId, blockNode, formalParamsNode);
+	}
+	| BasicType T_ID T_L_PAREN FormalParamList T_R_PAREN Block  {
+
+		// 函数返回类型
+		type_attr funcReturnType = $1;
+
+		// 函数名
+		var_id_attr funcId = $2;
+
+		// 函数体节点即Block，即$6
+		ast_node * blockNode = $6;
+
+		// 形参结点
+		ast_node * formalParamsNode = $4;
+
+		// 创建函数定义的节点，孩子有类型，函数名，语句块和形参
 		$$ = create_func_def(funcReturnType, funcId, blockNode, formalParamsNode);
 	}
 	;
@@ -198,8 +218,22 @@ VarDeclExpr: BasicType VarDef {
 		// 创建类型节点
 		ast_node * type_node = create_type_node($1);
 
-		// 创建变量定义节点
-		ast_node * decl_node = create_contain_node(ast_operator_type::AST_OP_VAR_DECL, type_node, $2);
+		// 根据VarDef的类型决定创建什么类型的节点
+		ast_node * decl_node;
+		if ($2->node_type == ast_operator_type::AST_OP_VAR_INIT) {
+			// 变量初始化：需要将类型节点插入到AST_OP_VAR_INIT节点的开头
+			decl_node = $2;
+			// 将类型节点插入到变量初始化节点的开头
+			decl_node->sons.insert(decl_node->sons.begin(), type_node);
+		} else if ($2->node_type == ast_operator_type::AST_OP_ARRAY_DECL || $2->node_type == ast_operator_type::AST_OP_ARRAY_INIT) {
+			// 数组声明或数组初始化：需要将类型节点插入到开头
+			decl_node = $2;
+			// 将类型节点插入到数组节点的开头
+			decl_node->sons.insert(decl_node->sons.begin(), type_node);
+		} else {
+			// 普通变量声明
+			decl_node = create_contain_node(ast_operator_type::AST_OP_VAR_DECL, type_node, $2);
+		}
 		decl_node->type = type_node->type;
 
 		// 创建变量声明语句，并加入第一个变量
@@ -210,15 +244,29 @@ VarDeclExpr: BasicType VarDef {
 		// 创建类型节点，这里从VarDeclExpr获取类型，前面已经设置
 		ast_node * type_node = ast_node::New($1->type);
 
-		// 创建变量定义节点
-		ast_node * decl_node = create_contain_node(ast_operator_type::AST_OP_VAR_DECL, type_node, $3);
+		// 根据VarDef的类型决定创建什么类型的节点
+		ast_node * decl_node;
+		if ($3->node_type == ast_operator_type::AST_OP_VAR_INIT) {
+			// 变量初始化：需要将类型节点插入到AST_OP_VAR_INIT节点的开头
+			decl_node = $3;
+			// 将类型节点插入到变量初始化节点的开头
+			decl_node->sons.insert(decl_node->sons.begin(), type_node);
+		} else if ($3->node_type == ast_operator_type::AST_OP_ARRAY_DECL || $3->node_type == ast_operator_type::AST_OP_ARRAY_INIT) {
+			// 数组声明或数组初始化：需要将类型节点插入到开头
+			decl_node = $3;
+			// 将类型节点插入到数组节点的开头
+			decl_node->sons.insert(decl_node->sons.begin(), type_node);
+		} else {
+			// 普通变量声明
+			decl_node = create_contain_node(ast_operator_type::AST_OP_VAR_DECL, type_node, $3);
+		}
 
 		// 插入到变量声明语句
 		$$ = $1->insert_son_node(decl_node);
 	}
 	;
 
-// 变量定义包含变量名，实际上还有初值，这里没有实现。
+// 变量定义包含变量名，支持初值和数组
 VarDef : T_ID {
 		// 变量ID
 
@@ -227,11 +275,122 @@ VarDef : T_ID {
 		// 对于字符型字面量的字符串空间需要释放，因词法用到了strdup进行了字符串复制
 		free($1.id);
 	}
+	| T_ID T_ASSIGN Expr {
+		// 变量ID和初始化表达式
+
+		// 创建变量ID节点
+		ast_node * id_node = ast_node::New(var_id_attr{$1.id, $1.lineno});
+
+		// 创建变量初始化节点，其孩子为变量ID和初始化表达式
+		$$ = create_contain_node(ast_operator_type::AST_OP_VAR_INIT, id_node, $3);
+
+		// 对于字符型字面量的字符串空间需要释放，因词法用到了strdup进行了字符串复制
+		free($1.id);
+	}
+	| T_ID ArrayDimensions {
+		// 数组变量声明
+
+		// 创建变量ID节点
+		ast_node * id_node = ast_node::New(var_id_attr{$1.id, $1.lineno});
+
+		// 创建数组声明节点，其孩子为变量ID和数组维度
+		$$ = create_contain_node(ast_operator_type::AST_OP_ARRAY_DECL, id_node, $2);
+
+		// 对于字符型字面量的字符串空间需要释放，因词法用到了strdup进行了字符串复制
+		free($1.id);
+	}
+	| T_ID ArrayDimensions T_ASSIGN Expr {
+		// 数组变量初始化（暂不支持，但语法要支持）
+
+		// 创建变量ID节点
+		ast_node * id_node = ast_node::New(var_id_attr{$1.id, $1.lineno});
+
+		// 创建数组初始化节点，其孩子为变量ID、数组维度和初始化表达式
+		$$ = create_contain_node(ast_operator_type::AST_OP_ARRAY_INIT, id_node, $2, $4);
+
+		// 对于字符型字面量的字符串空间需要释放，因词法用到了strdup进行了字符串复制
+		free($1.id);
+	}
 	;
 
-// 基本类型，目前只支持整型
+// 数组维度列表，支持一维和多维数组
+ArrayDimensions : ArrayDim {
+		// 第一个维度
+		$$ = create_contain_node(ast_operator_type::AST_OP_ARRAY_SUBSCRIPTS, $1);
+	}
+	| ArrayDimensions ArrayDim {
+		// 追加新的维度
+		$$ = $1->insert_son_node($2);
+	}
+	;
+
+// 单个数组维度
+ArrayDim : T_L_BRACKET T_DIGIT T_R_BRACKET {
+		// 数组维度为常量
+		$$ = ast_node::New($2);
+	}
+	| T_L_BRACKET T_R_BRACKET {
+		// 空的数组维度（用于形参）
+		digit_int_attr zero_dim;
+		zero_dim.val = 0;
+		zero_dim.lineno = yylineno;
+		$$ = ast_node::New(zero_dim);
+	}
+	;
+
+// 基本类型，支持整型和void类型
 BasicType: T_INT {
 		$$ = $1;
+	}
+	| T_VOID {
+		$$ = $1;
+	}
+	;
+
+// 形参列表，可支持多个形参
+FormalParamList : FormalParam {
+		// 创建形参列表节点，并把当前的形参节点加入
+		$$ = create_contain_node(ast_operator_type::AST_OP_FUNC_FORMAL_PARAMS, $1);
+	}
+	| FormalParamList T_COMMA FormalParam {
+		// 左递归增加形参
+		$$ = $1->insert_son_node($3);
+	}
+	;
+
+// 形参定义
+FormalParam : BasicType T_ID {
+		// 普通变量形参
+		// 创建类型节点
+		ast_node * type_node = create_type_node($1);
+
+		// 变量ID
+		ast_node * id_node = ast_node::New(var_id_attr{$2.id, $2.lineno});
+
+		// 创建形参节点
+		$$ = create_contain_node(ast_operator_type::AST_OP_FUNC_FORMAL_PARAM, type_node, id_node);
+		$$->type = type_node->type;
+
+		// 释放ID字符串
+		free($2.id);
+	}
+	| BasicType T_ID ArrayDimensions {
+		// 数组形参
+		// 创建类型节点
+		ast_node * type_node = create_type_node($1);
+
+		// 变量ID
+		ast_node * id_node = ast_node::New(var_id_attr{$2.id, $2.lineno});
+
+		// 创建数组声明节点
+		ast_node * array_decl_node = create_contain_node(ast_operator_type::AST_OP_ARRAY_DECL, id_node, $3);
+
+		// 创建形参节点
+		$$ = create_contain_node(ast_operator_type::AST_OP_FUNC_FORMAL_PARAM, type_node, array_decl_node);
+		$$->type = type_node->type;
+
+		// 释放ID字符串
+		free($2.id);
 	}
 	;
 
@@ -244,6 +403,12 @@ Statement : T_RETURN Expr T_SEMICOLON {
 
 		// 创建返回节点AST_OP_RETURN，其孩子为Expr，即$2
 		$$ = create_contain_node(ast_operator_type::AST_OP_RETURN, $2);
+	}
+	| T_RETURN T_SEMICOLON {
+		// 无返回值的返回语句
+
+		// 创建返回节点AST_OP_RETURN，无孩子
+		$$ = create_contain_node(ast_operator_type::AST_OP_RETURN);
 	}
 	| LVal T_ASSIGN Expr T_SEMICOLON {
 		// 赋值语句
@@ -486,6 +651,10 @@ PrimaryExp :  T_L_PAREN Expr T_R_PAREN {
 		// 带有括号的表达式
 		$$ = $2;
 	}
+	| T_L_PAREN CondExpr T_R_PAREN {
+		// 带有括号的条件表达式
+		$$ = $2;
+	}
 	| T_DIGIT {
         	// 无符号整型字面量
 
@@ -514,12 +683,35 @@ RealParamList : Expr {
 	}
 	;
 
-// 左值表达式，目前只支持变量名，实际上还有下标变量
+// 数组下标列表，用于数组元素访问
+ArraySubscripts : T_L_BRACKET Expr T_R_BRACKET {
+		// 第一个下标
+		$$ = create_contain_node(ast_operator_type::AST_OP_ARRAY_SUBSCRIPTS, $2);
+	}
+	| ArraySubscripts T_L_BRACKET Expr T_R_BRACKET {
+		// 追加新的下标
+		$$ = $1->insert_son_node($3);
+	}
+	;
+
+// 左值表达式，支持变量名和数组元素访问
 LVal : T_ID {
 		// 变量名终结符
 
 		// 创建变量名终结符节点
 		$$ = ast_node::New($1);
+
+		// 对于字符型字面量的字符串空间需要释放，因词法用到了strdup进行了字符串复制
+		free($1.id);
+	}
+	| T_ID ArraySubscripts {
+		// 数组元素访问
+
+		// 创建变量名终结符节点
+		ast_node * id_node = ast_node::New($1);
+
+		// 创建数组访问节点，其孩子为变量名和下标列表
+		$$ = create_contain_node(ast_operator_type::AST_OP_ARRAY_ACCESS, id_node, $2);
 
 		// 对于字符型字面量的字符串空间需要释放，因词法用到了strdup进行了字符串复制
 		free($1.id);

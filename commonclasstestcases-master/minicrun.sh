@@ -39,7 +39,7 @@ function dotestcase()
     RESULTFILE="${TESTNAME}.result"
 
     # 实验命令格式调整，如有错误请按实验要求修改
-    CMDNAME="./minic${APPFIX} -S -I -o ${IRFILE} ${CFILE}"
+    CMDNAME="../build/minic${APPFIX} -S -I -o ${IRFILE} ${CFILE}"
 
     OUTSTR=$(eval ${CMDNAME} 2>&1)
     echo "${OUTSTR}" > ${RESULTFILE}

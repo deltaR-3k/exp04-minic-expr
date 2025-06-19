@@ -174,6 +174,10 @@ set(IR_SRCS
 	ir/Instructions/LabelInstruction.h
 	ir/Instructions/MoveInstruction.cpp
 	ir/Instructions/MoveInstruction.h
+	ir/Instructions/LoadInstruction.cpp
+	ir/Instructions/LoadInstruction.h
+	ir/Instructions/StoreInstruction.cpp
+	ir/Instructions/StoreInstruction.h
 	ir/Types/VoidType.h
 	ir/Types/VoidType.cpp
 	ir/Types/LabelType.h
